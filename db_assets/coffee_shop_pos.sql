@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 17, 2026 at 01:47 AM
+-- Generation Time: Nov 17, 2026 at 02:36 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -47,9 +47,6 @@ CREATE TABLE `orders` (
   `order_number` varchar(20) NOT NULL,
   `order_type` enum('dine-in','takeout') NOT NULL DEFAULT 'dine-in',
   `status` enum('pending','paid','cancelled') NOT NULL DEFAULT 'pending',
-  `subtotal` decimal(10,2) NOT NULL DEFAULT 0.00,
-  `tax` decimal(10,2) NOT NULL DEFAULT 0.00,
-  `discount` decimal(10,2) NOT NULL DEFAULT 0.00,
   `total` decimal(10,2) NOT NULL DEFAULT 0.00,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
