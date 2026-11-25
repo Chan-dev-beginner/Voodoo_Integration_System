@@ -44,6 +44,12 @@ Object.assign(AppModel.prototype, {
     };
     this.accounts.push(user);
     this.save('voodooAccounts', this.accounts);
+    this.syncToDb('create_user', { username, fullName, password, role }).then(res => {
+      if (res.ok && res.id) {
+        user.id = res.id;
+        this.save('voodooAccounts', this.accounts);
+      }
+    });
     return user;
   },
 
@@ -56,6 +62,7 @@ Object.assign(AppModel.prototype, {
     }
     user.is_active = Number(user.is_active) === 1 ? 0 : 1;
     this.save('voodooAccounts', this.accounts);
+    this.syncToDb('toggle_user', { id: user.id, is_active: user.is_active });
     return user;
   },
 
@@ -71,6 +78,7 @@ Object.assign(AppModel.prototype, {
     }
     user.password = String(newPassword);
     this.save('voodooAccounts', this.accounts);
+    this.syncToDb('change_password', { id: user.id, newPassword });
     return user;
   }
 });

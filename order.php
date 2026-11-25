@@ -11,7 +11,7 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600;700&family=Oxanium:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20261125-MOD12">
+  <link rel="stylesheet" href="assets/styles.css?v=20261125-MOD13">
 </head>
 <body class="customer-ordering-body">
   <header class="customer-header">
@@ -221,7 +221,22 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         `;
       };
 
-      const loadProducts = () => {
+      let lastDbProductSync = 0;
+      const loadProducts = async (forceDb = false) => {
+        const now = Date.now();
+        if (forceDb || now - lastDbProductSync > 15000) {
+          lastDbProductSync = now;
+          try {
+            const resp = await fetch('Controller/db_sync.php?action=get_products');
+            const data = await resp.json();
+            if (data.ok && Array.isArray(data.products) && data.products.length) {
+              state.products = data.products;
+              saveStore('voodooProducts', state.products);
+              renderMenu();
+              return;
+            }
+          } catch (err) { /* fallback to localStorage */ }
+        }
         state.products = loadStore('voodooProducts', DEFAULT_PRODUCTS);
         renderMenu();
       };

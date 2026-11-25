@@ -55,7 +55,7 @@ Object.assign(AppController.prototype, {
   async saveBaristaShiftSales() {
     const statusEl = document.getElementById('shiftSaveStatus');
     try {
-      const result = this.model.saveShiftSalesToDatabase();
+      const result = await this.model.saveShiftSalesToDatabase();
       const shift = this.view.formatShiftPeriod(this.model.shiftStartedAt, result.loggedOutAt || new Date());
       if (statusEl) {
         statusEl.className = 'status done';
@@ -93,10 +93,42 @@ Object.assign(AppController.prototype, {
     if (!tbody) return;
     const records = this.model.fetchSavedSalesRecords();
     tbody.innerHTML = records.length
-      ? records.map(record => {
+      ? records.map((record, idx) => {
           const shift = this.view.formatShiftPeriod(record.shift_started_at, record.logged_out_at);
-          return `<tr><td><strong>${shift.label}</strong><br><small style="color:var(--muted)">${shift.range}</small></td><td>${record.account_name}</td><td>${record.total_orders}</td><td>${record.total_items}</td><td>${this.view.money(record.cash_total)}</td><td>${this.view.money(record.gcash_total)}</td><td><strong>${this.view.money(record.total_sales)}</strong></td><td>${new Date(record.logged_out_at.replace(' ', 'T')).toLocaleString('en-PH', { hour12: true })}</td></tr>`;
+          const key = record.shift_key || record.id || idx;
+          return `<tr><td><strong>${shift.label}</strong><br><small style="color:var(--muted)">${shift.range}</small></td><td>${record.account_name}</td><td>${record.total_orders}</td><td>${record.total_items}</td><td>${this.view.money(record.cash_total)}</td><td>${this.view.money(record.gcash_total)}</td><td><strong>${this.view.money(record.total_sales)}</strong></td><td>${new Date(record.logged_out_at.replace(' ', 'T')).toLocaleString('en-PH', { hour12: true })}</td><td><button class="row-action" type="button" data-action="download-shift-pdf" data-shift-key="${key}">Download PDF</button></td></tr>`;
         }).join('')
-      : '<tr><td colspan="8">No saved shift sales records yet.</td></tr>';
+      : '<tr><td colspan="9">No saved shift sales records yet.</td></tr>';
+  },
+
+  downloadShiftPdf(button) {
+    const key = button.dataset.shiftKey;
+    const records = this.model.fetchSavedSalesRecords();
+    const record = records.find((r, idx) => String(r.shift_key || r.id || idx) === String(key));
+    if (!record) return this.view.toast('Shift record not found');
+
+    const html = this.view.shiftRecordSummaryHtml(record);
+    if (typeof html2pdf === 'undefined') {
+      this.view.modal('Shift Sales Summary', html);
+      this.view.toast('PDF library not loaded, opening print dialog');
+      return window.print();
+    }
+
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-9999px;top:0;width:680px;background:#fff;padding:16px;';
+    host.innerHTML = html;
+    document.body.appendChild(host);
+
+    const safeDate = String(record.logged_out_at || '').slice(0, 10) || this.stamp();
+    const safeName = String(record.account_name || 'barista').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    html2pdf().set({
+      margin: 10,
+      filename: `shift-summary-${safeName}-${safeDate}.pdf`,
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    }).from(host.querySelector('.shift-summary')).save()
+      .then(() => this.view.toast('Shift PDF downloaded'))
+      .catch(() => this.view.toast('Could not create PDF'))
+      .finally(() => host.remove());
   }
 });

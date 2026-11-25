@@ -25,8 +25,16 @@ Object.assign(AppController.prototype, {
     if (!ordersChanged && !productsChanged) return;
 
     const newPendingQr = this.model.orders.filter(o => o.status === 'pending' && o.source === 'qr' && !prevPendingIds.has(o.id));
-    if (newPendingQr.length && this.model.account.role === 'barista') {
-      this.view.toast(`New QR order ${newPendingQr[0].id} awaiting approval`);
+    if (newPendingQr.length) {
+      newPendingQr.forEach(o => {
+        const items = (o.items || []).map(i => `${i.quantity}× ${i.name}`).join(', ');
+        this.view.pushNotification(
+          'order',
+          `New QR Order — ${o.id}`,
+          `${o.customerName || 'Customer'} ordered: ${items || 'items'}. Table: ${o.tableNote || 'N/A'}.`
+        );
+      });
+      this.view.toast(`${newPendingQr.length} new QR order${newPendingQr.length > 1 ? 's' : ''} waiting!`);
     }
 
     if (ordersChanged) {

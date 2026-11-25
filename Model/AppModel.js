@@ -57,4 +57,53 @@ class AppModel {
   save(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (error) { /* storage unavailable */ }
   }
+
+  async syncToDb(action, payload) {
+    try {
+      const resp = await fetch(`Controller/db_sync.php?action=${encodeURIComponent(action)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {})
+      });
+      return await resp.json();
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  async bootstrapFromDatabase() {
+    try {
+      const resp = await fetch('Controller/db_sync.php?action=bootstrap');
+      const data = await resp.json();
+      if (!data.ok) return false;
+
+      if (Array.isArray(data.users) && data.users.length) {
+        this.accounts = data.users;
+        this.save('voodooAccounts', this.accounts);
+      }
+      if (Array.isArray(data.products) && data.products.length) {
+        this.products = data.products.map(p => new Product(p.id, p.name, p.category, p.price, p.stock, p.image));
+        this.save('voodooProducts', this.products);
+      }
+      if (Array.isArray(data.orders)) {
+        const byId = new Map(data.orders.map(o => [o.id, o]));
+        for (const localOrder of this.load('voodooShiftOrders', [])) {
+          if (!byId.has(localOrder.id)) byId.set(localOrder.id, localOrder);
+        }
+        this.orders = Array.from(byId.values());
+        this.save('voodooShiftOrders', this.orders);
+      }
+      if (Array.isArray(data.restockRequests)) {
+        this.restockRequests = data.restockRequests;
+        this.save('voodooRestockRequests', this.restockRequests);
+      }
+      if (Array.isArray(data.shiftSales)) {
+        this.savedShiftSales = data.shiftSales;
+        this.save('voodooSavedShiftSales', this.savedShiftSales);
+      }
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
 }

@@ -1,6 +1,22 @@
 Object.assign(AppView.prototype, {
   productGrid() {
-    return `<div class="menu-grid">${this.model.products.map(product => `<article class="product-card"><div class="product-image"><img src="${product.image}" alt="${product.name}"></div><div class="product-info"><div><h3>${product.name}</h3><p>${this.money(product.price)}</p></div><button class="add-button" type="button" data-action="add" data-id="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋</button></div></article>`).join('')}</div>`;
+    return `<div class="menu-grid">${this.model.products.map(product => {
+      const stockLabel = product.stock <= 0
+        ? `<span class="stock-badge out">Out of stock</span>`
+        : product.stock <= 5
+          ? `<span class="stock-badge low">${product.stock} left</span>`
+          : `<span class="stock-badge ok">${product.stock} left</span>`;
+      return `<article class="product-card">
+        <div class="product-image"><img src="${product.image}" alt="${product.name}">${stockLabel}</div>
+        <div class="product-info">
+          <div>
+            <h3>${product.name}</h3>
+            <p>${this.money(product.price)}</p>
+          </div>
+          <button class="add-button" type="button" data-action="add" data-id="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋</button>
+        </div>
+      </article>`;
+    }).join('')}</div>`;
   },
 
   pos() {

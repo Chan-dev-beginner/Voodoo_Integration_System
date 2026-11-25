@@ -2,12 +2,6 @@
 -- Voodoo eSports Café Database
 -- ============================================
 
-CREATE DATABASE IF NOT EXISTS voodoo_esports_cafe
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-USE voodoo_esports_cafe;
-
 -- ============================================
 -- Users and Roles
 -- ============================================
@@ -18,7 +12,7 @@ CREATE TABLE users (
   password_hash VARCHAR(255) NOT NULL,
   full_name VARCHAR(100) NOT NULL,
   role ENUM('admin', 'cashier', 'barista', 'inventory', 'customer') NOT NULL,
-  is_active TINYINT(1) NOT sNULL DEFAULT 1,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

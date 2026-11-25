@@ -1,5 +1,8 @@
 class AppView {
-  constructor(model) { this.model = model; }
+  constructor(model) {
+    this.model = model;
+    this._notifications = [];
+  }
 
   money(value) { return `₱${Number(value).toFixed(2)}`; }
 
@@ -13,6 +16,137 @@ class AppView {
 
   clock() {
     document.getElementById('clock').textContent = new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date());
+  }
+
+  // ── Notification System ───────────────────────────────────────────────
+  pushNotification(type, title, body) {
+    const notif = {
+      id: Date.now(),
+      type,          // 'order' | 'low-stock' | 'info'
+      title,
+      body,
+      time: new Date(),
+      read: false
+    };
+    this._notifications.unshift(notif);
+    if (this._notifications.length > 50) this._notifications.length = 50;
+    this._updateBell();
+    this._playChime();
+    return notif;
+  }
+
+  _updateBell() {
+    const btn = document.querySelector('.icon-action[aria-label="Notifications"]');
+    if (!btn) return;
+    const unread = this._notifications.filter(n => !n.read).length;
+    const badge = btn.querySelector('span');
+    if (badge) {
+      badge.textContent = unread > 0 ? (unread > 9 ? '9+' : String(unread)) : '';
+      badge.className = unread > 0 ? 'notif-badge' : '';
+    }
+  }
+
+  _playChime() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [523, 659, 784].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.25);
+        osc.start(ctx.currentTime + i * 0.12);
+        osc.stop(ctx.currentTime + i * 0.12 + 0.25);
+      });
+    } catch (err) { /* audio blocked */ }
+  }
+
+  _escapeHtml(text) {
+    return String(text ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  _closeNotificationPanel() {
+    const existing = document.getElementById('notifPanel');
+    if (existing) existing.remove();
+    if (this._notifOutsideHandler) {
+      document.removeEventListener('click', this._notifOutsideHandler);
+      this._notifOutsideHandler = null;
+    }
+  }
+
+  toggleNotificationPanel() {
+    const existing = document.getElementById('notifPanel');
+    if (existing) {
+      this._closeNotificationPanel();
+      return;
+    }
+
+    this._notifications.forEach(n => { n.read = true; });
+    this._updateBell();
+
+    const btn = document.querySelector('.icon-action[aria-label="Notifications"]');
+    const rect = btn ? btn.getBoundingClientRect() : { right: 60, bottom: 50 };
+
+    const panel = document.createElement('div');
+    panel.id = 'notifPanel';
+    panel.className = 'notif-panel';
+    panel.innerHTML = `
+      <div class="notif-panel-head">
+        <strong>Notifications</strong>
+        <button type="button" id="notifClear" ${this._notifications.length === 0 ? 'disabled' : ''}>Clear all</button>
+      </div>
+      <div class="notif-list">
+        ${this._notifications.length === 0
+          ? '<div class="notif-empty">No notifications yet.</div>'
+          : this._notifications.map(n => `
+            <div class="notif-item ${n.type}" ${n.type === 'order' ? 'data-notif-nav="order-queue" style="cursor:pointer"' : ''}>
+              <div class="notif-icon">${n.type === 'order' ? '🛒' : n.type === 'low-stock' ? '⚠️' : 'ℹ️'}</div>
+              <div class="notif-content">
+                <strong>${this._escapeHtml(n.title)}</strong>
+                <p>${this._escapeHtml(n.body)}</p>
+                <small>${n.time.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true })}</small>
+              </div>
+            </div>`).join('')}
+      </div>`;
+
+    document.body.appendChild(panel);
+
+    // Position below the bell button
+    panel.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+    panel.style.right = Math.max(8, window.innerWidth - rect.right) + 'px';
+
+    panel.querySelector('#notifClear').onclick = () => {
+      this._notifications = [];
+      this._updateBell();
+      this._closeNotificationPanel();
+    };
+
+    panel.querySelectorAll('[data-notif-nav]').forEach(item => {
+      item.onclick = () => {
+        const targetModule = item.getAttribute('data-notif-nav');
+        this._closeNotificationPanel();
+        if (targetModule && this.model?.account?.role === 'barista') {
+          const navBtn = document.querySelector(`button[data-module="${targetModule}"]`);
+          if (navBtn) navBtn.click();
+        }
+      };
+    });
+
+    // Close on outside click
+    setTimeout(() => {
+      this._notifOutsideHandler = e => {
+        if (!panel.contains(e.target) && (!btn || !btn.contains(e.target))) {
+          this._closeNotificationPanel();
+        }
+      };
+      document.addEventListener('click', this._notifOutsideHandler);
+    }, 50);
   }
 
   nav(items) {

@@ -21,6 +21,7 @@ class AppController {
       'import': () => this.importInventory(),
       'export': () => this.exportInventory(),
       'download-summary': () => this.downloadSummary(),
+      'download-shift-pdf': b => this.downloadShiftPdf(b),
       'restock': () => this.navigate('restock'),
       'show-qr': () => this.showQrModal(),
       'copy-qr': () => this.copyQrUrl(),
@@ -64,7 +65,7 @@ class AppController {
 
     document.getElementById('logoutButton').onclick = () => this.logout();
     document.getElementById('primaryAction').onclick = () => this.primaryAction();
-    document.querySelector('.icon-action').onclick = () => this.view.toast('No new notifications');
+    document.querySelector('.icon-action').onclick = () => this.view.toggleNotificationPanel();
 
     // Delegate module and action button clicks so dynamic re-renders never lose handlers.
     document.addEventListener('click', event => {
@@ -126,6 +127,12 @@ class AppController {
     if (timeOutBtn) timeOutBtn.classList.toggle('hidden', role !== 'barista');
     this.refreshLiveData();
     this.startLivePolling();
+    this.model.bootstrapFromDatabase().then(ok => {
+      if (ok && this.model.account) {
+        const activeBtn = document.querySelector('[data-module].active');
+        this.navigate(activeBtn ? activeBtn.dataset.module : (role === 'barista' ? 'pos' : 'dashboard'));
+      }
+    });
   }
 
   navigate(module) {

@@ -86,6 +86,34 @@
   display: grid;
   place-items: center;
   overflow: hidden;
+  position: relative;
+}
+
+.stock-badge {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+  pointer-events: none;
+}
+
+.stock-badge.ok {
+  background: rgba(16, 185, 129, 0.88);
+  color: #fff;
+}
+
+.stock-badge.low {
+  background: rgba(245, 158, 11, 0.92);
+  color: #fff;
+}
+
+.stock-badge.out {
+  background: rgba(239, 68, 68, 0.88);
+  color: #fff;
 }
 
 .product-image img {

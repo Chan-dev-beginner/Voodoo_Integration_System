@@ -53,6 +53,7 @@ Object.assign(AppModel.prototype, {
         for (const qrOrder of data.orders) {
           if (!this.orders.find(o => o.id === qrOrder.id)) {
             this.orders.unshift(qrOrder);
+            this.syncToDb('save_order', qrOrder);
             changed = true;
           }
         }
@@ -102,6 +103,7 @@ Object.assign(AppModel.prototype, {
     this.orders = this.load('voodooShiftOrders', []);
     this.orders.unshift(order);
     this.save('voodooShiftOrders', this.orders);
+    this.syncToDb('save_order', order);
     return order;
   },
 
@@ -148,6 +150,11 @@ Object.assign(AppModel.prototype, {
       order.account = order.source === 'qr' ? `QR (${this.account.name})` : this.account.name;
     }
     this.save('voodooShiftOrders', this.orders);
+    this.syncToDb('update_order_status', {
+      id: orderNumber,
+      status: nextStatus,
+      userId: this.account?.id || null
+    });
     return order;
   },
 

@@ -8,6 +8,8 @@
 
 .ordering-layout .catalog-panel {
   background: var(--canvas);
+  padding: 24px 28px 30px;
+  overflow-y: auto;
 }
 
 .kiosk-hero {
@@ -32,31 +34,80 @@
   font-size: 13px;
 }
 
+/* ── Kiosk Cart (Customer Ordering sidebar) ─────────────────────────── */
 .kiosk-cart {
   min-height: 0;
   min-width: 0;
   background: white;
   border-left: 1px solid var(--line);
-  padding: 20px;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
+/* Heading row: "Your order / Cart" + Clear button */
 .kiosk-cart .order-heading {
   height: auto;
-  padding: 0 0 14px;
+  padding: 18px 20px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
 }
 
+.kiosk-cart .order-heading p {
+  margin: 0 0 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+.kiosk-cart .order-heading h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.kiosk-cart .order-heading button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 5px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.kiosk-cart .order-heading button:hover {
+  color: #ef4444;
+  background: #fff1f1;
+}
+
+/* Dine in / Take out tabs */
 .kiosk-cart .order-meta {
-  padding: 12px 0;
+  display: flex;
+  gap: 6px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
 }
 
+/* Scrollable cart items */
 .kiosk-cart .cart-items {
-  padding: 10px 0;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 20px;
 }
 
+/* Footer: total + fields + button */
 .kiosk-cart .order-total {
-  padding: 14px 0 0;
+  border-top: 1px solid var(--line);
+  padding: 14px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .customer-header {
@@ -101,12 +152,13 @@
   min-height: calc(100dvh - 70px);
 }
 
+/* Customer fields (name, table, payment) stacked in cart footer */
 .kiosk-cart .customer-fields,
 .customer-fields {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .kiosk-cart .customer-fields input,
@@ -121,6 +173,7 @@
   padding: 0 12px;
   background: white;
   color: var(--ink);
+  font-size: 13px;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -129,6 +182,25 @@
 .customer-fields select:focus {
   border-color: var(--purple);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
+}
+
+/* Grand total row */
+.kiosk-cart .grand-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+  margin-bottom: 12px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.kiosk-cart .grand-total strong {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--purple);
 }
 
 .customer-ordering-layout .product-card {
@@ -172,9 +244,54 @@
   cursor: not-allowed;
 }
 
+/* Place Order button — full width, purple gradient */
 .kiosk-cart .charge-button {
+  width: 100%;
+  height: 54px;
+  border: 0;
+  border-radius: 10px;
   background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.25);
+  box-shadow: 0 6px 20px rgba(109, 40, 217, 0.30);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: opacity 0.18s, transform 0.18s;
+}
+
+.kiosk-cart .charge-button:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.kiosk-cart .charge-button strong {
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Empty cart placeholder */
+.kiosk-cart .empty-cart {
+  height: 100%;
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: #b0b8c5;
+  font-size: 13px;
+  padding: 20px 0;
+}
+
+.kiosk-cart .empty-cart::before {
+  content: "🛒";
+  font-size: 28px;
+  opacity: 0.45;
 }
 
 .tracker-card {

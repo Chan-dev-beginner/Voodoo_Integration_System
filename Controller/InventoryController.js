@@ -48,12 +48,29 @@ Object.assign(AppController.prototype, {
     if (isNaN(stock) || stock < 0) return this.view.toast('Stock cannot be negative');
     if (isNaN(price) || price <= 0) return this.view.toast('Price must be greater than 0');
     const id = button.dataset.id;
+    let targetProduct;
     if (id) {
-      Object.assign(this.model.products.find(i => i.id === Number(id)), { name, category, stock, price });
+      targetProduct = this.model.products.find(i => i.id === Number(id));
+      Object.assign(targetProduct, { name, category, stock, price });
     } else {
-      this.model.products.push(new Product(Date.now(), name, category, price, stock, 'assets/2.png'));
+      targetProduct = new Product(Date.now(), name, category, price, stock, 'assets/2.png');
+      this.model.products.push(targetProduct);
     }
     this.model.saveProducts();
+    this.model.syncToDb('save_product', {
+      id: id ? Number(id) : 0,
+      name,
+      category,
+      price,
+      stock,
+      image: targetProduct.image || 'assets/2.png',
+      userId: this.model.account?.id || null
+    }).then(res => {
+      if (res.ok && res.id && !id) {
+        targetProduct.id = res.id;
+        this.model.saveProducts();
+      }
+    });
     this.view.closeModal();
     this.navigate('inventory');
   },
@@ -80,8 +97,15 @@ Object.assign(AppController.prototype, {
       restockRequests: this.model.restockRequests,
       savedShiftSales: this.model.savedShiftSales
     };
-    this.download(`voodoo-backup-${this.stamp()}.json`, JSON.stringify(data, null, 2), 'application/json');
+    const json = JSON.stringify(data, null, 2);
+    const fileName = `voodoo-backup-${this.stamp()}.json`;
+    this.download(fileName, json, 'application/json');
     try { localStorage.setItem('voodooLastBackup', data.createdAt); } catch (error) { /* ignore */ }
+    this.model.syncToDb('log_backup', {
+      userId: this.model.account?.id || null,
+      fileName,
+      fileSizeKb: Math.max(1, Math.round(json.length / 1024))
+    });
     this.view.toast('Backup downloaded');
     if (this.model.module === 'inventory') this.navigate('backup');
   },
@@ -111,8 +135,28 @@ Object.assign(AppController.prototype, {
           if (!name || isNaN(Number(price)) || isNaN(Number(stock))) return;
           const cat = categories.includes(category) ? category : 'Coffee';
           const existing = this.model.products.find(p => p.name.toLowerCase() === name.toLowerCase());
-          if (existing) Object.assign(existing, { category: cat, price: Number(price), stock: Number(stock) });
-          else this.model.products.push(new Product(Date.now() + count, name, cat, Number(price), Number(stock), 'assets/2.png'));
+          let target;
+          if (existing) {
+            Object.assign(existing, { category: cat, price: Number(price), stock: Number(stock) });
+            target = existing;
+          } else {
+            target = new Product(Date.now() + count, name, cat, Number(price), Number(stock), 'assets/2.png');
+            this.model.products.push(target);
+          }
+          this.model.syncToDb('save_product', {
+            id: existing ? existing.id : 0,
+            name,
+            category: cat,
+            price: Number(price),
+            stock: Number(stock),
+            image: target.image || 'assets/2.png',
+            userId: this.model.account?.id || null
+          }).then(res => {
+            if (res.ok && res.id && !existing) {
+              target.id = res.id;
+              this.model.saveProducts();
+            }
+          });
           count++;
         });
         this.model.saveProducts();

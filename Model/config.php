@@ -1,20 +1,27 @@
 <?php
 // Shared application configuration and database connection.
+date_default_timezone_set('Asia/Manila');
+
 if (!defined('APP_TITLE')) {
     define('APP_TITLE', 'Voodoo eSports Café');
 }
 
+$httpHost = strtolower((string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+$isLocalHost = str_contains($httpHost, 'localhost')
+    || str_contains($httpHost, '127.0.0.1')
+    || str_contains($httpHost, '[::1]');
+
 if (!defined('DB_HOST')) {
-    define('DB_HOST', getenv('VOODOO_DB_HOST') ?: '127.0.0.1');
+    define('DB_HOST', getenv('VOODOO_DB_HOST') ?: ($isLocalHost ? '127.0.0.1' : 'sql210.infinityfree.com'));
 }
 if (!defined('DB_NAME')) {
-    define('DB_NAME', getenv('VOODOO_DB_NAME') ?: 'voodoo_esports_cafe');
+    define('DB_NAME', getenv('VOODOO_DB_NAME') ?: ($isLocalHost ? 'voodoo_esports_cafe' : 'if0_43532033_voodoo_esports_cafe'));
 }
 if (!defined('DB_USER')) {
-    define('DB_USER', getenv('VOODOO_DB_USER') ?: 'root');
+    define('DB_USER', getenv('VOODOO_DB_USER') ?: ($isLocalHost ? 'root' : 'if0_43532033'));
 }
 if (!defined('DB_PASS')) {
-    define('DB_PASS', getenv('VOODOO_DB_PASS') ?: '');
+    define('DB_PASS', getenv('VOODOO_DB_PASS') ?: ($isLocalHost ? '' : 'VoodooCafeImus'));
 }
 
 /**
@@ -33,6 +40,7 @@ function getDbConnection(): PDO
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
+    $pdo->exec("SET time_zone = '+08:00'");
 
     ensureSalesSchema($pdo);
     return $pdo;
