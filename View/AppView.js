@@ -88,6 +88,18 @@ class AppView {
     return `<div class="shift-summary"><div class="shift-summary-header"><span>VOODOO ESPORTS CAFÉ</span><h2>Shift Sales Summary</h2><p>${new Date(this.model.shiftStartedAt).toLocaleString()} — ${new Date().toLocaleString()}</p><p>User: ${this.model.account.name}</p></div><div class="shift-summary-stats"><div><span>Orders</span><strong>${orders.length}</strong></div><div><span>Items sold</span><strong>${items}</strong></div><div><span>Net sales</span><strong>${this.money(total)}</strong></div></div><table class="summary-table"><thead><tr><th>Payment method</th><th>Amount</th></tr></thead><tbody>${paymentRows}</tbody></table><div class="shift-summary-total"><span>Total sales</span><strong>${this.money(total)}</strong></div><div class="summary-actions"><button class="secondary-action" type="button" data-action="close-summary">Close</button><button class="primary-action" type="button" data-action="download-summary">Download PDF</button></div></div>`;
   }
 
+  alerts() {
+    const low = this.model.products.filter(product => product.stock <= 5);
+    if (!low.length) return '<div class="alert-grid"><article class="alert-card warning"><strong>All good</strong><p>No products are low on stock.</p></article></div>';
+    return `<div class="alert-grid">${low.map(product => `<article class="alert-card ${product.stock ? 'warning' : ''}"><strong>${product.name} — ${product.stock ? product.stock + ' cups remaining' : 'Out of stock'}</strong><p>${product.stock ? 'Below minimum stock level.' : 'Immediate restock required.'}</p><button class="secondary-action" type="button" data-action="restock" data-id="${product.id}">Restock</button></article>`).join('')}</div>`;
+  }
+
+  backup() {
+    let last = 'Never';
+    try { const saved = localStorage.getItem('voodooLastBackup'); if (saved) last = new Date(saved).toLocaleString(); } catch (error) { /* ignore */ }
+    return `<div class="inventory-header"><div class="inventory-stats"><article><span>Last backup</span><strong>${last}</strong></article><article><span>Products</span><strong>${this.model.products.length} items</strong></article><article><span>Orders saved</span><strong>${this.model.orders.length}</strong></article></div><button class="primary-action" type="button" data-action="backup">↓ Create Backup</button></div>`;
+  }
+
   renderCart() {
     const totals = this.model.totals();
     const html = this.model.cart.length ? this.model.cart.map(item => `<div class="cart-item"><img src="${item.image}" alt=""><div><h4>${item.name}</h4><small>${this.money(item.price)}</small></div><div class="quantity"><button type="button" data-action="minus" data-id="${item.id}">−</button><span>${item.quantity}</span><button type="button" data-action="plus" data-id="${item.id}">＋</button></div></div>`).join('') : '<div class="empty-cart">Your cart is empty.</div>';
@@ -108,5 +120,3 @@ class AppView {
 
   closeModal() { const modal = document.getElementById('actionModal'); modal.classList.remove('open'); modal.innerHTML = ''; }
 }
-
-
