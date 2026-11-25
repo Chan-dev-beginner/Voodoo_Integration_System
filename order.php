@@ -11,7 +11,7 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600;700&family=Oxanium:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20261125-MOD10">
+  <link rel="stylesheet" href="assets/styles.css?v=20261125-MOD12">
 </head>
 <body class="customer-ordering-body">
   <header class="customer-header">
@@ -164,7 +164,7 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
                   <input type="number" class="card-qty-input" data-card-qty="${product.id}" value="1" min="1" max="${Math.max(1, product.stock)}" ${product.stock <= 0 ? 'disabled' : ''} aria-label="Quantity for ${product.name}">
                   <button type="button" data-step="1" data-id="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋</button>
                 </div>
-                <button class="add-button" type="button" data-add="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋</button>
+                <button class="add-button" type="button" data-add="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋ Add</button>
               </div>
             </div>
           </article>
