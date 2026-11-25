@@ -52,7 +52,7 @@
   <script src="View/DashboardView.js?v=20261125-MOD10"></script>
   <script src="View/PosView.js?v=20261125-MOD11"></script>
   <script src="View/QueueView.js?v=20261125-MOD10"></script>
-  <script src="View/InventoryView.js?v=20261125-MOD10"></script>
+  <script src="View/InventoryView.js?v=20261126-MOD11"></script>
   <script src="View/SalesView.js?v=20261125-MOD11"></script>
   <script src="View/AdminView.js?v=20261125-MOD10"></script>
   <script src="Controller/AppController.js?v=20261125-MOD13"></script>

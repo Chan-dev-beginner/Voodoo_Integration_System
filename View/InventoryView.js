@@ -21,7 +21,16 @@ Object.assign(AppView.prototype, {
       return `<div class="inventory-tools"><div><h2>Restock Requests</h2><p>${pending} request(s) awaiting approval</p></div></div><div class="data-card"><div class="table-wrap"><table><thead><tr><th>Request</th><th>Product</th><th>Quantity</th><th>Requested by</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows || '<tr><td colspan="6">No restock requests.</td></tr>'}</tbody></table></div></div>`;
     }
     const history = this.model.restockRequests.filter(request => request.requestedBy === this.model.account.name).map(request => `<p><strong>${request.productName}</strong> · ${request.quantity} cups · <span class="status ${request.status === 'Approved' ? 'done' : 'pending'}">${request.status}</span></p>`).join('');
-    return `<div class="restock-grid"><section class="form-card"><h2>Request restock</h2><form id="restockForm" class="form-grid"><label>Product<select id="restockProduct">${this.model.products.map(product => `<option value="${product.id}">${product.name}</option>`).join('')}</select></label><label>Quantity (cups)<input id="restockQuantity" type="number" value="10" min="1"></label><button class="primary-action" type="submit">Submit Request</button></form></section><section class="form-card"><h2>My requests</h2>${history || '<p>No restock requests submitted.</p>'}</section></div>`;
+    const availabilityRows = this.model.products.map(product => {
+      const status = product.stock <= 0 ? 'Out of stock' : product.stock <= 5 ? 'Low stock' : 'In stock';
+      const statusClass = product.stock <= 0 ? 'stock-out' : product.stock <= 5 ? 'stock-low' : 'status done';
+      return `<tr><td><strong>${product.name}</strong></td><td>${product.category}</td><td>${product.stock} cups</td><td><span class="${statusClass}">${status}</span></td></tr>`;
+    }).join('');
+    const productOptions = this.model.products.map(product => {
+      const status = product.stock <= 0 ? 'Out of stock' : product.stock <= 5 ? 'Low stock' : 'In stock';
+      return `<option value="${product.id}">${product.name} (${product.stock} cups — ${status})</option>`;
+    }).join('');
+    return `<div class="restock-grid"><section class="form-card"><h2>Request restock</h2><form id="restockForm" class="form-grid"><label>Product<select id="restockProduct">${productOptions}</select></label><label>Quantity (cups)<input id="restockQuantity" type="number" value="10" min="1"></label><button class="primary-action" type="submit">Submit Request</button></form></section><section class="form-card"><h2>My requests</h2>${history || '<p>No restock requests submitted.</p>'}</section></div><div class="data-card"><div class="data-head"><h2>Product Availability</h2></div><div class="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>Available Quantity</th><th>Status</th></tr></thead><tbody>${availabilityRows}</tbody></table></div></div>`;
   },
 
   backup() {
