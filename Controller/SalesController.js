@@ -35,7 +35,24 @@ Object.assign(AppController.prototype, {
       .finally(() => { if (actions) actions.style.display = ''; });
   },
 
-  saveBaristaShiftSales() {
+  async timeOutShift() {
+    try {
+      const result = await this.model.saveShiftSalesToDatabase();
+      this.model.archiveCurrentShiftOrders();
+      await this.model.notifyBaristaBridge('barista_logout', { archive: true });
+      this.stopLivePolling();
+      this.view.closeModal();
+      this.model.account = null;
+      this.model.cart = [];
+      document.getElementById('appShell').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+      this.view.toast(`Time Out recorded! ${result.totalOrders || 0} order(s) transferred to database.`);
+    } catch (error) {
+      this.view.toast(error.message || 'Could not complete Time Out');
+    }
+  },
+
+  async saveBaristaShiftSales() {
     const statusEl = document.getElementById('shiftSaveStatus');
     try {
       const result = this.model.saveShiftSalesToDatabase();
@@ -50,6 +67,24 @@ Object.assign(AppController.prototype, {
         statusEl.className = 'status pending';
         statusEl.textContent = `Save failed: ${error.message}`;
       }
+    }
+  },
+
+  async loadSalesForecast() {
+    const container = document.getElementById('forecastCards');
+    if (!container) return;
+    const btn = document.querySelector('[data-action="run-forecast"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
+    try {
+      const data = await this.model.fetchSalesForecast(7);
+      this.view.renderForecastData(data);
+      this.view.toast('Forecast generated successfully');
+    } catch (error) {
+      this.view.toast(error.message || 'Could not generate forecast');
+      const chartEl = document.getElementById('forecastChart');
+      if (chartEl) chartEl.innerHTML = `<p style="color:var(--red);text-align:center;padding:40px 0;"><strong>Error:</strong> ${error.message}</p>`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Generate Forecast'; }
     }
   },
 

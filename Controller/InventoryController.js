@@ -11,7 +11,9 @@ Object.assign(AppController.prototype, {
         }
       } else {
         const product = this.model.products.find(item => item.id === Number(document.getElementById('restockProduct').value));
-        product.stock += Number(document.getElementById('restockQuantity').value);
+        const qty = Number(document.getElementById('restockQuantity').value);
+        if (!product || qty <= 0) return this.view.toast('Invalid restock quantity');
+        product.stock += qty;
         this.model.saveProducts();
         this.view.toast('Product restocked');
         this.navigate('inventory');
@@ -30,7 +32,10 @@ Object.assign(AppController.prototype, {
 
   manageProduct(button) {
     const product = button.dataset.id ? this.model.products.find(i => i.id === Number(button.dataset.id)) : null;
-    this.view.modal(product ? 'Manage ' + product.name : 'Add Product', `<div class="form-grid"><label>Product name<input id="productName" value="${product ? product.name : ''}"></label><label>Category<select id="productCategory"><option>Coffee</option><option>Frappe</option><option>Refresher</option></select></label><label>Stock<input id="productStock" type="number" value="${product ? product.stock : 10}"></label><label>Price<input id="productPrice" type="number" value="${product ? product.price : 150}"></label></div><button class="primary-action" type="button" data-action="save" data-id="${product ? product.id : ''}">Save</button>`);
+    const categoryOptions = ['Coffee', 'Frappe', 'Refresher']
+      .map(cat => `<option ${product?.category === cat ? 'selected' : ''}>${cat}</option>`)
+      .join('');
+    this.view.modal(product ? 'Manage ' + product.name : 'Add Product', `<div class="form-grid"><label>Product name<input id="productName" value="${product ? product.name : ''}"></label><label>Category<select id="productCategory">${categoryOptions}</select></label><label>Stock<input id="productStock" type="number" min="0" value="${product ? product.stock : 10}"></label><label>Price<input id="productPrice" type="number" min="1" value="${product ? product.price : 150}"></label></div><button class="primary-action" type="button" data-action="save" data-id="${product ? product.id : ''}">Save</button>`);
     this.bindDynamic();
   },
 
@@ -40,6 +45,8 @@ Object.assign(AppController.prototype, {
     const category = document.getElementById('productCategory').value;
     const stock = Number(document.getElementById('productStock').value);
     const price = Number(document.getElementById('productPrice').value);
+    if (isNaN(stock) || stock < 0) return this.view.toast('Stock cannot be negative');
+    if (isNaN(price) || price <= 0) return this.view.toast('Price must be greater than 0');
     const id = button.dataset.id;
     if (id) {
       Object.assign(this.model.products.find(i => i.id === Number(id)), { name, category, stock, price });

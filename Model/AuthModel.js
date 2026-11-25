@@ -57,5 +57,20 @@ Object.assign(AppModel.prototype, {
     user.is_active = Number(user.is_active) === 1 ? 0 : 1;
     this.save('voodooAccounts', this.accounts);
     return user;
+  },
+
+  changePassword(userId, currentPassword, newPassword) {
+    this.accounts = this.load('voodooAccounts', this.defaultAccounts());
+    const user = this.accounts.find(u => u.id === Number(userId));
+    if (!user) throw new Error('User not found.');
+    if (user.password !== String(currentPassword)) {
+      throw new Error('Current password is incorrect.');
+    }
+    if (!newPassword || newPassword.length < 4) {
+      throw new Error('New password must be at least 4 characters.');
+    }
+    user.password = String(newPassword);
+    this.save('voodooAccounts', this.accounts);
+    return user;
   }
 });

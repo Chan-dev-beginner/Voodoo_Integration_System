@@ -9,7 +9,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--navy);
+  background: linear-gradient(180deg, #1b1035 0%, #2a1852 60%, #371e6d 100%);
   color: white;
   padding: 30px 18px 20px;
 }
@@ -63,9 +63,9 @@
 }
 
 .nav-item.active {
-  background: var(--purple);
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
   color: white;
-  box-shadow: 0 8px 24px rgba(105, 81, 204, 0.22);
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35);
 }
 
 .nav-icon {
@@ -203,10 +203,11 @@
   height: 42px;
   border: 0;
   border-radius: 7px;
-  background: var(--purple);
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
   color: white;
   padding: 0 16px;
   font-weight: 700;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.22);
 }
 
 .secondary-action {

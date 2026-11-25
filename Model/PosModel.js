@@ -28,7 +28,7 @@ Object.assign(AppModel.prototype, {
   },
 
   getActiveOrders() {
-    return this.orders.filter(order => ['pending', 'queue', 'preparing'].includes(order.status));
+    return this.orders.filter(order => !order.archived && ['pending', 'queue', 'preparing'].includes(order.status));
   },
 
   syncProductsFromServer() {
@@ -42,6 +42,35 @@ Object.assign(AppModel.prototype, {
   syncOrdersFromServer() {
     this.orders = this.load('voodooShiftOrders', []);
     return this.orders;
+  },
+
+  async pollQrOrdersBridge() {
+    try {
+      const resp = await fetch('Controller/orders_bridge.php?action=poll');
+      const data = await resp.json();
+      if (data.ok && Array.isArray(data.orders)) {
+        let changed = false;
+        for (const qrOrder of data.orders) {
+          if (!this.orders.find(o => o.id === qrOrder.id)) {
+            this.orders.unshift(qrOrder);
+            changed = true;
+          }
+        }
+        if (changed) this.save('voodooShiftOrders', this.orders);
+        return changed;
+      }
+    } catch (err) { /* offline or bridge unavailable */ }
+    return false;
+  },
+
+  async updateQrOrderBridge(orderId, status) {
+    try {
+      await fetch('Controller/orders_bridge.php?action=update_status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: orderId, status })
+      });
+    } catch (err) { /* silent — localStorage is primary */ }
   },
 
   placePosOrder(paymentMethod) {

@@ -8,24 +8,76 @@
 .status-column {
   min-height: 360px;
   border: 1px solid var(--line);
+  border-top: 4px solid var(--muted);
   border-radius: 9px;
   background: #f8f9fb;
   padding: 12px;
+}
+
+.status-column.col-pending {
+  background: #fff8ed;
+  border-color: #fbd38d;
+  border-top-color: #ea580c;
+}
+
+.status-column.col-queue {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  border-top-color: #2563eb;
+}
+
+.status-column.col-preparing {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  border-top-color: #16a34a;
 }
 
 .status-column h3 {
   margin: 5px 5px 12px;
   font-size: 13px;
   text-transform: uppercase;
+  font-weight: 700;
   color: var(--muted);
+}
+
+.status-column.col-pending h3 {
+  color: #c2410c;
+}
+
+.status-column.col-queue h3 {
+  color: #1d4ed8;
+}
+
+.status-column.col-preparing h3 {
+  color: #15803d;
 }
 
 .status-ticket {
   background: white;
   border: 1px solid var(--line);
+  border-left: 5px solid var(--purple);
   border-radius: 8px;
   padding: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 6px rgba(16, 23, 37, 0.05);
+}
+
+.status-ticket.status-pending {
+  border-color: #fdba74;
+  border-left: 5px solid #ea580c;
+  background: #fffaf3;
+}
+
+.status-ticket.status-queue {
+  border-color: #93c5fd;
+  border-left: 5px solid #2563eb;
+  background: #f5f9ff;
+}
+
+.status-ticket.status-preparing {
+  border-color: #6ee7b7;
+  border-left: 5px solid #16a34a;
+  background: #f2fcf7;
 }
 
 .status-ticket strong {
@@ -82,19 +134,46 @@
 
 .queue-card {
   border: 1px solid var(--line);
-  border-left: 4px solid var(--purple);
+  border-left: 5px solid var(--purple);
   border-radius: 8px;
   padding: 12px;
   background: #fafbfd;
 }
 
 .queue-card.status-pending {
-  border-left-color: #d9903b;
-  background: #fffcf7;
+  border-color: #fdba74;
+  border-left: 5px solid #ea580c;
+  background: #fff4e5;
+}
+
+.queue-card.status-queue {
+  border-color: #93c5fd;
+  border-left: 5px solid #2563eb;
+  background: #eaf3ff;
 }
 
 .queue-card.status-preparing {
-  border-left-color: var(--green);
+  border-color: #6ee7b7;
+  border-left: 5px solid #16a34a;
+  background: #e7faef;
+}
+
+.status.status-pending {
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+}
+
+.status.status-queue {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+}
+
+.status.status-preparing {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
 }
 
 .queue-card-top {
@@ -147,26 +226,31 @@
 }
 
 .queue-approve {
-  background: var(--purple);
-  border-color: var(--purple);
+  background: #ea580c;
+  border-color: #ea580c;
   color: white;
+  font-weight: 700;
 }
 
 .queue-prepare {
-  background: #eef6ff;
-  border-color: #bfd9ff;
-  color: #1c5fb8;
+  background: #2563eb;
+  border-color: #2563eb;
+  color: white;
+  font-weight: 700;
 }
 
 .queue-complete {
-  background: #e6f5ec;
-  border-color: #b7e3c8;
-  color: var(--green);
+  background: #16a34a;
+  border-color: #16a34a;
+  color: white;
+  font-weight: 700;
 }
 
 .queue-reject {
-  color: var(--red);
-  border-color: #f0c9c9;
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fca5a5;
+  font-weight: 700;
 }
 
 .queue-empty-col {

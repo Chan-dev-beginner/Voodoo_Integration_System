@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600;700&family=Oxanium:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20261125-MOD2">
+  <link rel="stylesheet" href="assets/styles.css?v=20261125-MOD10">
 </head>
 <body>
   <section class="login-screen" id="loginScreen">
@@ -34,7 +34,7 @@
     <main class="main-area">
       <header class="topbar">
         <div><p class="page-label" id="pageLabel">Point of sale</p><h1 id="pageTitle">Dashboard</h1></div>
-        <div class="top-actions"><button class="clock" id="clock" type="button">--:-- --</button><button class="icon-action" type="button" aria-label="Notifications">●<span></span></button><button class="primary-action" id="primaryAction" type="button">＋ New Order</button></div>
+        <div class="top-actions"><button class="clock" id="clock" type="button">--:-- --</button><button class="icon-action" type="button" aria-label="Notifications">●<span></span></button><button class="secondary-action hidden" id="timeOutButton" type="button" data-action="time-out">Time Out</button><button class="primary-action" id="primaryAction" type="button">＋ New Order</button></div>
       </header>
       <div id="viewContainer" class="view-container"></div>
     </main>
@@ -43,25 +43,25 @@
   <div class="toast" id="toast" role="status"></div>
   <div id="actionModal"></div>
   <script>window.VOODOO_QR_INFO = <?= json_encode(getCustomerOrderingDetails(), JSON_UNESCAPED_SLASHES) ?>;</script>
-  <script src="Model/AppModel.js?v=20261125-MOD2"></script>
-  <script src="Model/AuthModel.js?v=20261125-MOD2"></script>
-  <script src="Model/PosModel.js?v=20261125-MOD2"></script>
-  <script src="Model/InventoryModel.js?v=20261125-MOD2"></script>
-  <script src="Model/SalesModel.js?v=20261125-MOD2"></script>
-  <script src="View/AppView.js?v=20261125-MOD2"></script>
-  <script src="View/DashboardView.js?v=20261125-MOD2"></script>
-  <script src="View/PosView.js?v=20261125-MOD2"></script>
-  <script src="View/QueueView.js?v=20261125-MOD2"></script>
-  <script src="View/InventoryView.js?v=20261125-MOD2"></script>
-  <script src="View/SalesView.js?v=20261125-MOD2"></script>
-  <script src="View/AdminView.js?v=20261125-MOD2"></script>
-  <script src="Controller/AppController.js?v=20261125-MOD2"></script>
-  <script src="Controller/PosController.js?v=20261125-MOD2"></script>
-  <script src="Controller/QueueController.js?v=20261125-MOD2"></script>
-  <script src="Controller/InventoryController.js?v=20261125-MOD2"></script>
-  <script src="Controller/SalesController.js?v=20261125-MOD2"></script>
-  <script src="Controller/AccountsController.js?v=20261125-MOD2"></script>
-  <script src="Controller/AppBootstrap.js?v=20261125-MOD2"></script>
+  <script src="Model/AppModel.js?v=20261125-MOD10"></script>
+  <script src="Model/AuthModel.js?v=20261125-MOD10"></script>
+  <script src="Model/PosModel.js?v=20261125-MOD10"></script>
+  <script src="Model/InventoryModel.js?v=20261125-MOD10"></script>
+  <script src="Model/SalesModel.js?v=20261125-MOD10"></script>
+  <script src="View/AppView.js?v=20261125-MOD10"></script>
+  <script src="View/DashboardView.js?v=20261125-MOD10"></script>
+  <script src="View/PosView.js?v=20261125-MOD10"></script>
+  <script src="View/QueueView.js?v=20261125-MOD10"></script>
+  <script src="View/InventoryView.js?v=20261125-MOD10"></script>
+  <script src="View/SalesView.js?v=20261125-MOD10"></script>
+  <script src="View/AdminView.js?v=20261125-MOD10"></script>
+  <script src="Controller/AppController.js?v=20261125-MOD10"></script>
+  <script src="Controller/PosController.js?v=20261125-MOD10"></script>
+  <script src="Controller/QueueController.js?v=20261125-MOD10"></script>
+  <script src="Controller/InventoryController.js?v=20261125-MOD10"></script>
+  <script src="Controller/SalesController.js?v=20261125-MOD10"></script>
+  <script src="Controller/AccountsController.js?v=20261125-MOD10"></script>
+  <script src="Controller/AppBootstrap.js?v=20261125-MOD10"></script>
   <script src="assets/qrcode.min.js?v=20261125-QR2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>

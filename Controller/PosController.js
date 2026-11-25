@@ -9,13 +9,16 @@ Object.assign(AppController.prototype, {
     this.pollTimer = null;
   },
 
-  refreshLiveData() {
+  async refreshLiveData() {
     if (!this.model.account) return;
     const prevOrdersJson = JSON.stringify(this.model.orders);
     const prevProductsJson = JSON.stringify(this.model.products);
     const prevPendingIds = new Set(this.model.orders.filter(o => o.status === 'pending').map(o => o.id));
     this.model.syncOrdersFromServer();
     this.model.syncProductsFromServer();
+
+    // Also poll the server bridge for QR orders from other devices
+    await this.model.pollQrOrdersBridge();
 
     const ordersChanged = JSON.stringify(this.model.orders) !== prevOrdersJson;
     const productsChanged = JSON.stringify(this.model.products) !== prevProductsJson;
@@ -30,6 +33,7 @@ Object.assign(AppController.prototype, {
       const strip = document.getElementById('posQueueStrip');
       if (strip) strip.innerHTML = this.view.posQueueStrip();
       if (this.model.module === 'order-queue') this.navigate('order-queue');
+      if (this.model.module === 'dashboard') this.navigate('dashboard');
     }
     if (productsChanged) {
       const grid = document.getElementById('posGrid');

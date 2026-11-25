@@ -145,3 +145,93 @@
   font-size: 12px;
   color: var(--muted);
 }
+
+.card-order-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8f9fb;
+  overflow: hidden;
+}
+
+.card-qty-stepper button {
+  width: 26px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+  padding: 0;
+}
+
+.card-qty-stepper button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.card-qty-input {
+  width: 32px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 0;
+  -moz-appearance: textfield;
+}
+
+.card-qty-input::-webkit-outer-spin-button,
+.card-qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.ordering-closed {
+  min-height: calc(100dvh - 70px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(27, 16, 53, 0.95), rgba(76, 29, 149, 0.88));
+}
+
+.ordering-closed-card {
+  width: min(440px, 100%);
+  background: white;
+  border-radius: 14px;
+  padding: 32px 26px;
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(16, 10, 35, 0.35);
+}
+
+.ordering-closed-card .brand-kicker {
+  font-size: 16px;
+  color: var(--purple);
+  font-weight: 700;
+}
+
+.ordering-closed-card h2 {
+  margin: 10px 0 8px;
+  font-family: 'Oxanium', sans-serif;
+  color: var(--ink);
+}
+
+.ordering-closed-card p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ordering-closed-card small {
+  color: var(--purple);
+  font-weight: 600;
+}

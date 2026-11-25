@@ -27,7 +27,11 @@ class AppController {
       'refresh-qr': () => this.refreshQrNetwork(),
       'regen-qr': () => this.renderQrCode(),
       'order-status': b => this.changeOrderStatus(b),
-      'toggle-user': b => this.toggleUserAccount(b)
+      'toggle-user': b => this.toggleUserAccount(b),
+      'change-password': b => this.openChangePassword(b),
+      'submit-password': () => this.submitChangePassword(),
+      'run-forecast': () => this.loadSalesForecast(),
+      'time-out': () => this.timeOutShift()
     };
     this.pollTimer = null;
     this.bindGlobal();
@@ -104,24 +108,40 @@ class AppController {
     document.querySelector('.avatar').textContent = (this.model.account.name || 'U').charAt(0).toUpperCase();
 
     this.view.nav(role === 'admin'
-      ? [['dashboard','','Dashboard'],['inventory','','Stock Monitor'],['alerts','','Alerts'],['restock','','Restock Requests'],['order-log','','Order Log'],['accounts','','Accounts'],['backup','','Backup Data']]
+      ? [['dashboard','','Dashboard'],['forecast','','Sales Forecast'],['inventory','','Stock Monitor'],['alerts','','Alerts'],['restock','','Restock Requests'],['order-log','','Order Log'],['accounts','','Accounts'],['backup','','Backup Data']]
       : [['pos','','POS'],['order-queue','','Order Queue'],['dashboard','','Dashboard'],['restock','','Request Restock'],['order-log','','Order Log']]);
 
     this.navigate(role === 'barista' ? 'pos' : 'dashboard');
     this.view.clock();
+    if (role === 'barista') {
+      this.model.archivePreviousOrdersAndSaveShift().then(res => {
+        if (res.archived > 0) {
+          this.view.toast(res.saved ? 'Previous orders archived & shift sales stored' : 'Previous orders archived');
+          if (this.model.module === 'pos') this.navigate('pos');
+        }
+      });
+      this.model.notifyBaristaBridge('barista_login');
+    }
+    const timeOutBtn = document.getElementById('timeOutButton');
+    if (timeOutBtn) timeOutBtn.classList.toggle('hidden', role !== 'barista');
     this.refreshLiveData();
     this.startLivePolling();
   }
 
   navigate(module) {
+    if (['forecast', 'accounts', 'backup'].includes(module) && this.model.account?.role !== 'admin') {
+      module = 'dashboard';
+    }
     this.model.module = module;
     if (['inventory','alerts','restock','backup','order-log','accounts'].includes(module)) this.model.module = 'inventory';
     else if (module === 'pos' || module === 'ordering' || module === 'order-queue') this.model.module = module;
+    else if (module === 'forecast') this.model.module = 'forecast';
     else this.model.module = 'dashboard';
 
     document.getElementById('pageLabel').textContent = this.model.account.role === 'admin' ? 'Inventory management' : 'Barista workspace';
     const titles = {
       dashboard: 'Dashboard',
+      forecast: 'Sales Forecast',
       pos: 'POS',
       'order-queue': 'Order Queue',
       ordering: 'Ordering',
@@ -143,6 +163,7 @@ class AppController {
       restock: () => this.view.restock(),
       'order-log': () => this.view.shiftOrders(),
       accounts: () => this.view.accounts(),
+      forecast: () => this.view.salesForecast(),
       backup: () => this.view.backup(),
       dashboard: () => this.view.dashboard()
     };
@@ -153,6 +174,7 @@ class AppController {
     this.bindDynamic();
     if (module === 'order-log') this.loadSavedSalesRecords();
     if (module === 'accounts') this.loadAccounts();
+    if (module === 'forecast') this.loadSalesForecast();
   }
 
   bindDynamic() {
@@ -169,13 +191,13 @@ class AppController {
   logout() {
     this.view.modal('Shift Summary', this.view.shiftSummary());
     this.bindDynamic();
-    if (this.model.account?.role === 'barista') {
-      this.saveBaristaShiftSales();
-    }
   }
 
   closeSummary() {
     this.stopLivePolling();
+    if (this.model.account?.role === 'barista') {
+      this.model.notifyBaristaBridge('barista_logout', { archive: false });
+    }
     this.view.closeModal();
     this.model.account = null;
     this.model.cart = [];

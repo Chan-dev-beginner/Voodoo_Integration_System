@@ -1,11 +1,12 @@
 /* Voodoo eSports Café — Modular Stylesheet Manifest */
-@import url('base.css?v=20261125-MOD2');
-@import url('login.css?v=20261125-MOD2');
-@import url('layout.css?v=20261125-MOD2');
-@import url('dashboard.css?v=20261125-MOD2');
-@import url('pos.css?v=20261125-MOD2');
-@import url('queue.css?v=20261125-MOD2');
-@import url('ordering.css?v=20261125-MOD2');
-@import url('inventory.css?v=20261125-MOD2');
-@import url('modals.css?v=20261125-MOD2');
-@import url('responsive.css?v=20261125-MOD2');
+@import url('base.css?v=20261125-MOD9');
+@import url('login.css?v=20261125-MOD9');
+@import url('layout.css?v=20261125-MOD9');
+@import url('dashboard.css?v=20261125-MOD9');
+@import url('pos.css?v=20261125-MOD3');
+@import url('queue.css?v=20261125-MOD4');
+@import url('ordering.css?v=20261125-MOD10');
+@import url('inventory.css?v=20261125-MOD6');
+@import url('modals.css?v=20261125-MOD6');
+@import url('forecast.css?v=20261125-MOD6');
+@import url('responsive.css?v=20261125-MOD6');

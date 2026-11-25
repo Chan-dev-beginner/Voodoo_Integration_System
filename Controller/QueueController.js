@@ -5,6 +5,8 @@ Object.assign(AppController.prototype, {
     button.disabled = true;
     try {
       this.model.updateOrderStatus(orderNumber, nextStatus);
+      // Sync status back to the server bridge so the customer's phone sees it
+      this.model.updateQrOrderBridge(orderNumber, nextStatus);
       const strip = document.getElementById('posQueueStrip');
       if (strip) strip.innerHTML = this.view.posQueueStrip();
       const grid = document.getElementById('posGrid');

@@ -1,15 +1,15 @@
 :root {
-  --navy: #101725;
-  --navy-2: #171f2e;
+  --navy: #1b1035;
+  --navy-2: #27184b;
   --panel: #ffffff;
-  --canvas: #f3f5f7;
-  --ink: #18202e;
-  --muted: #7e8796;
-  --line: #e7eaf0;
-  --purple: #6951cc;
-  --purple-2: #ece9ff;
+  --canvas: #f6f4ff;
+  --ink: #1e1633;
+  --muted: #756b92;
+  --line: #e5dff7;
+  --purple: #7c3aed;
+  --purple-2: #efeaff;
   --orange: #f28b4b;
-  --green: #38a169;
+  --green: #10b981;
   --red: #dc5a67;
 }
 

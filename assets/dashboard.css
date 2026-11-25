@@ -6,26 +6,60 @@
 }
 
 .metric-card {
-  background: white;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #ffffff 0%, #fafbff 100%);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 12px;
   padding: 18px;
+  box-shadow: 0 4px 14px rgba(16, 23, 37, 0.04);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+}
+
+.metric-card:nth-child(2)::before {
+  background: linear-gradient(90deg, #6d28d9, #8b5cf6);
+}
+
+.metric-card:nth-child(3)::before {
+  background: linear-gradient(90deg, #9333ea, #c084fc);
+}
+
+.metric-card:nth-child(4)::before {
+  background: linear-gradient(90deg, #5b21b6, #a78bfa);
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(105, 81, 204, 0.1);
 }
 
 .metric-card span {
   color: var(--muted);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .metric-card strong {
   display: block;
   font-family: 'Oxanium', sans-serif;
   font-size: 25px;
+  color: var(--navy);
   margin: 8px 0 3px;
 }
 
 .metric-card small {
-  color: var(--green);
+  color: #059669;
+  font-weight: 600;
 }
 
 .dashboard-split {
@@ -37,26 +71,80 @@
 
 .chart-card,
 .activity-card {
-  background: white;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfcff 100%);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 12px;
   min-height: 280px;
-  padding: 18px;
+  padding: 20px;
+  box-shadow: 0 4px 16px rgba(16, 23, 37, 0.04);
+}
+
+.chart-card h2,
+.activity-card h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--navy);
 }
 
 .chart-bars {
-  height: 210px;
+  height: 215px;
   display: flex;
-  align-items: end;
-  gap: 10px;
+  align-items: flex-end;
+  gap: 12px;
   border-bottom: 1px solid var(--line);
-  padding-top: 20px;
+  padding: 22px 6px 8px;
+  background-image: linear-gradient(to top, rgba(231, 234, 240, 0.65) 1px, transparent 1px);
+  background-size: 100% 25%;
 }
 
-.chart-bars i {
+.chart-bar-col {
   flex: 1;
-  background: linear-gradient(#8171d8, #6951cc);
-  border-radius: 5px 5px 0 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chart-bar-col i {
+  width: 100%;
+  max-width: 44px;
+  background: linear-gradient(180deg, #a78bfa 0%, #7c3aed 55%, #5b21b6 100%);
+  border-radius: 7px 7px 2px 2px;
+  box-shadow: 0 6px 14px rgba(124, 58, 237, 0.24);
+  transition: height 0.35s ease, transform 0.18s ease, filter 0.18s ease;
+}
+
+.chart-bar-col:last-child i:not(.empty-bar) {
+  background: linear-gradient(180deg, #e879f9 0%, #a855f7 55%, #7e22ce 100%);
+  box-shadow: 0 6px 16px rgba(168, 85, 247, 0.34);
+}
+
+.chart-bar-col i:hover {
+  filter: brightness(1.08);
+  transform: scaleY(1.03);
+  transform-origin: bottom;
+}
+
+.chart-bar-col i.empty-bar {
+  background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
+  box-shadow: none;
+}
+
+.chart-bar-col small {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.chart-bar-col:last-child small {
+  color: #7c3aed;
 }
 
 .activity-list {
@@ -68,16 +156,24 @@
 .activity-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   border-bottom: 1px solid var(--line);
-  padding-bottom: 10px;
+  padding: 6px 8px 10px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.activity-item:hover {
+  background: #f8f7ff;
 }
 
 .activity-dot {
-  width: 9px;
-  height: 9px;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--purple);
+  background: linear-gradient(135deg, #7c3aed, #a78bfa);
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.14);
 }
 
 .activity-item span {

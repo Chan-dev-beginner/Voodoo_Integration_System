@@ -1,0 +1,26 @@
+{
+    "test_shift_verify": {
+        "shift_key": "test_shift_verify",
+        "account_name": "Barista",
+        "shift_started_at": "2026-11-25 09:39:16",
+        "logged_out_at": "2026-11-25 09:39:16",
+        "total_orders": 2,
+        "total_items": 3,
+        "cash_total": 300,
+        "gcash_total": 150,
+        "other_total": 0,
+        "total_sales": 450
+    },
+    "barista_2026-11-25T07:49:16.712Z": {
+        "shift_key": "barista_2026-11-25T07:49:16.712Z",
+        "account_name": "Barista",
+        "shift_started_at": "2026-11-25 08:49:16",
+        "logged_out_at": "2026-11-25 09:41:43",
+        "total_orders": 3,
+        "total_items": 16,
+        "cash_total": 2665,
+        "gcash_total": 0,
+        "other_total": 0,
+        "total_sales": 2665
+    }
+}

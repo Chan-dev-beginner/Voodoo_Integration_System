@@ -11,7 +11,7 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600;700&family=Oxanium:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20261125-MOD2">
+  <link rel="stylesheet" href="assets/styles.css?v=20261125-MOD10">
 </head>
 <body class="customer-ordering-body">
   <header class="customer-header">
@@ -22,7 +22,16 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
     <button class="secondary-action" type="button" id="trackLookupBtn">Track Order</button>
   </header>
 
-  <main class="ordering-layout customer-ordering-layout">
+  <div id="orderingClosedNotice" class="ordering-closed hidden">
+    <div class="ordering-closed-card">
+      <span class="brand-kicker">Voodoo eSports Café</span>
+      <h2>Ordering is Currently Closed</h2>
+      <p>No barista is currently signed in. Customer ordering will open automatically once a barista logs in.</p>
+      <small>Checking barista status automatically...</small>
+    </div>
+  </div>
+
+  <main class="ordering-layout customer-ordering-layout" id="orderingMain">
     <section class="catalog-panel">
       <div class="kiosk-hero">
         <p>Voodoo eSports Café · QR Self-Order</p>
@@ -65,9 +74,9 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
 
       <div class="order-total">
         <div class="customer-fields">
-          <input type="text" id="customerName" placeholder="Your name (optional)">
-          <input type="text" id="customerTable" placeholder="PC / Table # (optional)">
-          <select id="customerPayment">
+          <input type="text" id="customerName" placeholder="Your name * (required)" required>
+          <input type="text" id="customerTable" placeholder="PC / Table # * (required)" required>
+          <select id="customerPayment" aria-label="Payment method">
             <option value="Cash">Pay with Cash</option>
             <option value="GCash">Pay with GCash</option>
           </select>
@@ -113,7 +122,7 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         category: 'All',
         search: '',
         orderType: 'dine-in',
-        activeOrderNumber: localStorage.getItem('voodooCustomerOrderNumber') || ''
+        trackedName: localStorage.getItem('voodooCustomerOrderName') || ''
       };
 
       const money = value => `₱${Number(value || 0).toFixed(2)}`;
@@ -149,7 +158,14 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
                 <h3>${product.name}</h3>
                 <p>${money(product.price)} · ${product.stock > 0 ? product.stock + ' left' : 'Out of stock'}</p>
               </div>
-              <button class="add-button" type="button" data-add="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋</button>
+              <div class="card-order-controls">
+                <div class="card-qty-stepper">
+                  <button type="button" data-step="-1" data-id="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>−</button>
+                  <input type="number" class="card-qty-input" data-card-qty="${product.id}" value="1" min="1" max="${Math.max(1, product.stock)}" ${product.stock <= 0 ? 'disabled' : ''} aria-label="Quantity for ${product.name}">
+                  <button type="button" data-step="1" data-id="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋</button>
+                </div>
+                <button class="add-button" type="button" data-add="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋</button>
+              </div>
             </div>
           </article>
         `).join('') || '<p>No products found.</p>';
@@ -195,8 +211,8 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         card.innerHTML = `
           <div class="tracker-top">
             <div>
-              <small>Live Order Status</small>
-              <h3>${order.id} · ${statusLabel(order.status)}</h3>
+              <small>Live Order Status${order.tableNote ? ' · ' + order.tableNote : ''}</small>
+              <h3>${order.customerName || 'Customer'} · ${statusLabel(order.status)}</h3>
             </div>
             <strong>${money(order.total)}</strong>
           </div>
@@ -210,28 +226,56 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         renderMenu();
       };
 
-      const pollTrackedOrder = () => {
-        if (!state.activeOrderNumber) return;
+      const pollTrackedOrder = async (notifyIfMissing = false) => {
+        if (!state.trackedName) return false;
+        const needle = state.trackedName.trim().toLowerCase();
+        // Try server bridge first (works across devices)
+        try {
+          const resp = await fetch('Controller/orders_bridge.php?action=track&name=' + encodeURIComponent(state.trackedName));
+          const data = await resp.json();
+          if (data.ok && data.order) { renderTracker(data.order); return true; }
+        } catch (err) { /* fall through to localStorage */ }
+        // Fallback: same-browser localStorage (latest matching order)
         const orders = loadStore('voodooShiftOrders', []);
-        const order = orders.find(o => o.id === state.activeOrderNumber);
-        if (order) renderTracker(order);
+        const order = orders.find(o => String(o.customerName || '').trim().toLowerCase() === needle || String(o.id || '').trim().toLowerCase() === needle);
+        if (order) { renderTracker(order); return true; }
+        if (notifyIfMissing) toast('No order found for that name');
+        return false;
       };
 
       document.addEventListener('click', event => {
+        const stepBtn = event.target.closest('[data-step]');
+        if (stepBtn) {
+          const id = Number(stepBtn.dataset.id);
+          const delta = Number(stepBtn.dataset.step);
+          const input = document.querySelector(`[data-card-qty="${id}"]`);
+          const product = state.products.find(p => p.id === id);
+          if (!input || !product) return;
+          const next = Math.max(1, Math.min(product.stock, (parseInt(input.value, 10) || 1) + delta));
+          input.value = next;
+          return;
+        }
+
         const addBtn = event.target.closest('[data-add]');
         if (addBtn) {
           const id = Number(addBtn.dataset.add);
           const product = state.products.find(p => p.id === id);
           if (!product || product.stock <= 0) return toast('Out of stock');
+          const qtyInput = document.querySelector(`[data-card-qty="${id}"]`);
+          const qtyToAdd = Math.max(1, parseInt(qtyInput?.value, 10) || 1);
           const existing = state.cart.find(c => c.id === id);
-          if (existing) {
-            if (existing.quantity >= product.stock) return toast('Not enough stock');
-            existing.quantity++;
-          } else {
-            state.cart.push({ ...product, quantity: 1 });
+          const currentQty = existing ? existing.quantity : 0;
+          if (currentQty + qtyToAdd > product.stock) {
+            return toast(`Only ${product.stock - currentQty} left in stock`);
           }
+          if (existing) {
+            existing.quantity += qtyToAdd;
+          } else {
+            state.cart.push({ ...product, quantity: qtyToAdd });
+          }
+          if (qtyInput) qtyInput.value = 1;
           renderCart();
-          return toast('Added to cart');
+          return toast(`Added ${qtyToAdd}× ${product.name}`);
         }
 
         const qtyBtn = event.target.closest('[data-qty]');
@@ -275,16 +319,35 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         renderCart();
       };
 
-      document.getElementById('trackLookupBtn').onclick = () => {
-        const num = prompt('Enter your Order # (for example #Q123456):', state.activeOrderNumber || '#Q');
-        if (!num) return;
-        state.activeOrderNumber = num.trim();
-        localStorage.setItem('voodooCustomerOrderNumber', state.activeOrderNumber);
-        pollTrackedOrder();
+      document.getElementById('trackLookupBtn').onclick = async () => {
+        const defaultName = state.trackedName || document.getElementById('customerName').value.trim() || '';
+        const name = prompt('Enter your name to track your order:', defaultName);
+        if (!name || !name.trim()) return;
+        state.trackedName = name.trim();
+        localStorage.setItem('voodooCustomerOrderName', state.trackedName);
+        await pollTrackedOrder(true);
       };
 
-      document.getElementById('placeCustomerOrder').onclick = () => {
+      document.getElementById('placeCustomerOrder').onclick = async () => {
         if (!state.cart.length) return toast('Your cart is empty');
+        const nameInput = document.getElementById('customerName');
+        const tableInput = document.getElementById('customerTable');
+        const customerName = nameInput.value.trim();
+        const tableNote = tableInput.value.trim();
+        if (!customerName) {
+          nameInput.focus();
+          return toast('Please enter your name');
+        }
+        if (!tableNote) {
+          tableInput.focus();
+          return toast('Please enter your PC # or Table #');
+        }
+
+        const paymentMethod = document.getElementById('customerPayment').value;
+        if (paymentMethod !== 'Cash' && paymentMethod !== 'GCash') {
+          return toast('Payment must be Cash or GCash only');
+        }
+
         loadProducts();
         for (const cartItem of state.cart) {
           const product = state.products.find(p => p.id === cartItem.id);
@@ -296,12 +359,12 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         const subtotal = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
         const order = {
           id: '#Q' + String(Date.now()).slice(-6),
-          customerName: document.getElementById('customerName').value.trim() || 'QR Customer',
-          tableNote: document.getElementById('customerTable').value.trim(),
+          customerName,
+          tableNote,
           source: 'qr',
           orderType: state.orderType,
           status: 'pending',
-          paymentMethod: document.getElementById('customerPayment').value,
+          paymentMethod,
           account: 'QR Customer',
           time: new Date().toISOString(),
           items: state.cart.map(item => ({
@@ -316,16 +379,41 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
           total: subtotal
         };
 
+        // Save to localStorage (same-browser fallback)
         const orders = loadStore('voodooShiftOrders', []);
         orders.unshift(order);
         saveStore('voodooShiftOrders', orders);
 
+        // Send to server bridge so barista on another device can see it
+        try {
+          await fetch('Controller/orders_bridge.php?action=place', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(order)
+          });
+        } catch (err) { /* offline fallback — localStorage only */ }
+
         state.cart = [];
         renderCart();
-        state.activeOrderNumber = order.id;
-        localStorage.setItem('voodooCustomerOrderNumber', order.id);
+        state.trackedName = customerName;
+        localStorage.setItem('voodooCustomerOrderName', customerName);
         renderTracker(order);
-        toast(`Order ${order.id} sent for barista approval`);
+        toast(`Order for ${customerName} sent for barista approval`);
+      };
+
+      const checkBaristaOnline = async () => {
+        const notice = document.getElementById('orderingClosedNotice');
+        const main = document.getElementById('orderingMain');
+        try {
+          const resp = await fetch('Controller/orders_bridge.php?action=barista_status');
+          const data = await resp.json();
+          const open = Boolean(data.ok && data.loggedIn);
+          state.baristaOnline = open;
+          if (notice) notice.classList.toggle('hidden', open);
+          if (main) main.classList.toggle('hidden', !open);
+        } catch (err) {
+          // Keep current state if network blips
+        }
       };
 
       window.addEventListener('storage', () => {
@@ -333,10 +421,12 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         pollTrackedOrder();
       });
 
+      checkBaristaOnline();
       loadProducts();
       renderCart();
       pollTrackedOrder();
       setInterval(() => {
+        checkBaristaOnline();
         loadProducts();
         pollTrackedOrder();
       }, 3000);
