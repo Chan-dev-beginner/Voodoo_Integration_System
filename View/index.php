@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600;700&family=Oxanium:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/styles.css?v=20261125-QR2">
 </head>
 <body>
   <section class="login-screen" id="loginScreen">
@@ -42,10 +42,12 @@
 
   <div class="toast" id="toast" role="status"></div>
   <div id="actionModal"></div>
-  <script src="Model/AppModel.js?v=20261120-NEW"></script>
-  <script src="View/AppView.js?v=20261120-NEW"></script>
-  <script src="Controller/AppController.js?v=20261120-NEW"></script>
-  <script src="Controller/AppBootstrap.js?v=20261120-NEW"></script>
+  <script>window.VOODOO_QR_INFO = <?= json_encode(getCustomerOrderingDetails(), JSON_UNESCAPED_SLASHES) ?>;</script>
+  <script src="Model/AppModel.js?v=20261125-LOCAL1"></script>
+  <script src="View/AppView.js?v=20261125-LOCAL1"></script>
+  <script src="Controller/AppController.js?v=20261125-LOCAL1"></script>
+  <script src="Controller/AppBootstrap.js?v=20261125-LOCAL1"></script>
+  <script src="assets/qrcode.min.js?v=20261125-QR2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>

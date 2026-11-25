@@ -17,7 +17,7 @@ CREATE TABLE users (
   username VARCHAR(50) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   full_name VARCHAR(100) NOT NULL,
-  role ENUM('admin', 'cashier', 'inventory', 'customer') NOT NULL,
+  role ENUM('admin', 'cashier', 'barista', 'inventory', 'customer') NOT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -65,9 +65,11 @@ CREATE TABLE orders (
   id INT AUTO_INCREMENT PRIMARY KEY,
   order_number VARCHAR(20) NOT NULL UNIQUE,
   customer_name VARCHAR(100) DEFAULT 'Walk-in Customer',
+  table_note VARCHAR(50) NULL,
   cashier_id INT NULL,
+  source ENUM('pos', 'qr') NOT NULL DEFAULT 'pos',
   order_type ENUM('dine-in', 'take-out') NOT NULL,
-  status ENUM('new', 'preparing', 'ready', 'completed', 'cancelled') NOT NULL DEFAULT 'new',
+  status ENUM('pending', 'queue', 'preparing', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
   subtotal DECIMAL(10, 2) NOT NULL,
   tax DECIMAL(10, 2) NOT NULL,
   total DECIMAL(10, 2) NOT NULL,
@@ -138,6 +140,36 @@ CREATE TABLE backups (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
+
+-- ============================================
+-- Shift Sales Records (Saved on Barista Logout)
+-- ============================================
+
+CREATE TABLE shift_sales (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  shift_key VARCHAR(80) NOT NULL UNIQUE,
+  cashier_id INT NULL,
+  account_name VARCHAR(100) NOT NULL,
+  shift_started_at DATETIME NOT NULL,
+  logged_out_at DATETIME NOT NULL,
+  total_orders INT NOT NULL DEFAULT 0,
+  total_items INT NOT NULL DEFAULT 0,
+  cash_total DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  gcash_total DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  other_total DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  total_sales DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (cashier_id) REFERENCES users(id)
+);
+
+-- ============================================
+-- Seed Default Users
+-- ============================================
+
+INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES
+  ('admin', 'admin', 'Admin', 'admin', 1),
+  ('barista', 'barista', 'Barista', 'cashier', 1);
 
 -- ============================================
 -- Seed Categories and Products

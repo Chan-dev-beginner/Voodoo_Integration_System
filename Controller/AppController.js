@@ -21,69 +21,195 @@ class AppController {
       'import': () => this.importInventory(),
       'export': () => this.exportInventory(),
       'download-summary': () => this.downloadSummary(),
-      'restock': () => this.navigate('restock')
+      'restock': () => this.navigate('restock'),
+      'show-qr': () => this.showQrModal(),
+      'copy-qr': () => this.copyQrUrl(),
+      'refresh-qr': () => this.refreshQrNetwork(),
+      'regen-qr': () => this.renderQrCode(),
+      'order-status': b => this.changeOrderStatus(b),
+      'toggle-user': b => this.toggleUserAccount(b)
     };
+    this.pollTimer = null;
+    this.qrRefreshTimer = null;
     this.bindGlobal();
   }
 
   bindGlobal() {
     document.getElementById('togglePassword').onclick = () => { const password = document.getElementById('password'); password.type = password.type === 'password' ? 'text' : 'password'; };
     document.getElementById('loginAccount').onchange = event => { const role = event.target.value; document.getElementById('accountHint').textContent = role === 'admin' ? 'Admin: admin / admin' : 'Barista: barista / barista'; document.getElementById('username').value = role; document.getElementById('password').value = role; };
-    document.getElementById('loginForm').onsubmit = event => { event.preventDefault(); const role = document.getElementById('loginAccount').value; const username = document.getElementById('username').value; const password = document.getElementById('password').value; const valid = (role === 'admin' && username === 'admin' && password === 'admin') || (role === 'barista' && username === 'barista' && password === 'barista'); if (!valid) return this.view.toast('Invalid username or password'); this.login(role); };
+    document.getElementById('loginForm').onsubmit = event => {
+      event.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      try {
+        const user = this.model.loginUser(username, password);
+        this.login(user);
+      } catch (error) {
+        this.view.toast(error.message || 'Invalid username or password');
+      }
+    };
     document.getElementById('logoutButton').onclick = () => this.logout();
     document.getElementById('primaryAction').onclick = () => this.primaryAction();
     document.querySelector('.icon-action').onclick = () => this.view.toast('No new notifications');
+
+    // Delegate module and action button clicks so dynamic re-renders (e.g. cart updates) never lose handlers.
+    document.addEventListener('click', event => {
+      const moduleButton = event.target.closest('button[data-module]');
+      if (moduleButton) {
+        document.querySelectorAll('[data-module]').forEach(item => item.classList.remove('active'));
+        moduleButton.classList.add('active');
+        this.navigate(moduleButton.dataset.module);
+        return;
+      }
+
+      const actionButton = event.target.closest('button[data-action]');
+      if (actionButton) {
+        this.action(actionButton);
+      }
+    });
+
+    // Re-detect active network automatically if the device switches Wi-Fi/network while QR modal is open.
+    window.addEventListener('online', () => {
+      if (document.getElementById('qrCodeCanvas')) this.refreshQrNetwork();
+    });
   }
 
-  login(role) {
-    this.model.account = { role, name: role === 'admin' ? 'Admin' : 'Barista' };
+  login(userOrRole) {
+    const user = typeof userOrRole === 'string'
+      ? { id: null, username: userOrRole, role: userOrRole, fullName: userOrRole === 'admin' ? 'Admin' : 'Barista' }
+      : userOrRole;
+    const role = user.role === 'admin' ? 'admin' : 'barista';
+    this.model.account = { id: user.id || null, username: user.username || role, role, name: user.fullName || (role === 'admin' ? 'Admin' : 'Barista') };
     this.model.shiftStartedAt = new Date().toISOString();
+    this.model.orderType = 'dine-in';
+    this.model.cart = [];
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('appShell').classList.remove('hidden');
     document.getElementById('staffName').textContent = this.model.account.name;
-    document.querySelector('.avatar').textContent = role === 'admin' ? 'A' : 'B';
+    document.querySelector('.avatar').textContent = (this.model.account.name || 'U').charAt(0).toUpperCase();
     // The second item is unused: AppView.nav() picks icons by the first item (the module key).
     this.view.nav(role === 'admin'
-      ? [['dashboard','','Dashboard'],['inventory','','Stock Monitor'],['alerts','','Alerts'],['restock','','Restock Requests'],['order-log','','Order Log'],['backup','','Backup Data']]
-      : [['dashboard','','Dashboard'],['pos','','POS'],['ordering','','Ordering'],['restock','','Request Restock'],['order-log','','Order Log']]);
-    this.navigate('dashboard');
+      ? [['dashboard','','Dashboard'],['inventory','','Stock Monitor'],['alerts','','Alerts'],['restock','','Restock Requests'],['order-log','','Order Log'],['accounts','','Accounts'],['backup','','Backup Data']]
+      : [['pos','','POS'],['order-queue','','Order Queue'],['dashboard','','Dashboard'],['restock','','Request Restock'],['order-log','','Order Log']]);
+    this.navigate(role === 'barista' ? 'pos' : 'dashboard');
     this.view.clock();
+    this.refreshLiveData();
+    this.startLivePolling();
+  }
+
+  startLivePolling() {
+    clearInterval(this.pollTimer);
+    this.pollTimer = setInterval(() => this.refreshLiveData(), 3000);
+  }
+
+  stopLivePolling() {
+    clearInterval(this.pollTimer);
+    this.pollTimer = null;
+  }
+
+  refreshLiveData() {
+    if (!this.model.account) return;
+    const prevOrdersJson = JSON.stringify(this.model.orders);
+    const prevProductsJson = JSON.stringify(this.model.products);
+    const prevPendingIds = new Set(this.model.orders.filter(o => o.status === 'pending').map(o => o.id));
+    this.model.syncOrdersFromServer();
+    this.model.syncProductsFromServer();
+
+    const ordersChanged = JSON.stringify(this.model.orders) !== prevOrdersJson;
+    const productsChanged = JSON.stringify(this.model.products) !== prevProductsJson;
+    if (!ordersChanged && !productsChanged) return;
+
+    const newPendingQr = this.model.orders.filter(o => o.status === 'pending' && o.source === 'qr' && !prevPendingIds.has(o.id));
+    if (newPendingQr.length && this.model.account.role === 'barista') {
+      this.view.toast(`New QR order ${newPendingQr[0].id} awaiting approval`);
+    }
+
+    if (ordersChanged) {
+      const strip = document.getElementById('posQueueStrip');
+      if (strip) strip.innerHTML = this.view.posQueueStrip();
+      if (this.model.module === 'order-queue') this.navigate('order-queue');
+    }
+    if (productsChanged) {
+      const grid = document.getElementById('posGrid');
+      const searchVal = document.querySelector('[data-action="menu-search"]')?.value?.trim();
+      if (grid && !searchVal) grid.innerHTML = this.view.productGrid();
+    }
   }
 
   navigate(module) {
     this.model.module = module;
-    if (['inventory','alerts','restock','backup','order-log'].includes(module)) this.model.module = 'inventory';
-    else if (module === 'pos' || module === 'ordering') this.model.module = module;
+    if (['inventory','alerts','restock','backup','order-log','accounts'].includes(module)) this.model.module = 'inventory';
+    else if (module === 'pos' || module === 'ordering' || module === 'order-queue') this.model.module = module;
     else this.model.module = 'dashboard';
     document.getElementById('pageLabel').textContent = this.model.account.role === 'admin' ? 'Inventory management' : 'Barista workspace';
-    const titles = { dashboard:'Dashboard', pos:'POS', ordering:'Ordering', inventory:'Stock Monitor', alerts:'Alert Module', restock:'Restock Requests', backup:'Backup Data', 'order-log':'Shift Order Log' };
+    const titles = { dashboard:'Dashboard', pos:'POS', 'order-queue':'Order Queue', ordering:'Ordering', inventory:'Stock Monitor', alerts:'Alert Module', restock:'Restock Requests', backup:'Backup Data', 'order-log':'Shift Order Log', accounts:'Staff Accounts' };
     document.getElementById('pageTitle').textContent = titles[module];
     let html;
     if (module === 'pos') html = this.view.pos();
+    else if (module === 'order-queue') html = this.view.orderQueue();
     else if (module === 'ordering') html = this.view.ordering();
     else if (module === 'inventory') html = this.view.inventory();
     else if (module === 'alerts') html = this.view.alerts();
     else if (module === 'restock') html = this.view.restock();
     else if (module === 'order-log') html = this.view.shiftOrders();
+    else if (module === 'accounts') html = this.view.accounts();
     else if (module === 'backup') html = this.view.backup();
     else html = this.view.dashboard();
     document.getElementById('viewContainer').innerHTML = `<section class="module-view">${html}</section>`;
     this.view.renderCart();
     this.bindDynamic();
+    if (module === 'order-log') this.loadSavedSalesRecords();
+    if (module === 'accounts') this.loadAccounts();
   }
 
   bindDynamic() {
-    document.querySelectorAll('[data-module]').forEach(button => button.onclick = () => { document.querySelectorAll('[data-module]').forEach(item => item.classList.remove('active')); button.classList.add('active'); this.navigate(button.dataset.module); });
-    document.querySelectorAll('[data-action]').forEach(button => button.onclick = () => this.action(button));
-
     const menuSearch = document.querySelector('[data-action="menu-search"]');
-    if (menuSearch) menuSearch.oninput = event => { const grid = document.getElementById('posGrid') || document.getElementById('orderingGrid'); const query = event.target.value.toLowerCase(); grid.innerHTML = this.model.products.filter(product => product.name.toLowerCase().includes(query)).map(product => `<article class="product-card"><div class="product-image"><img src="${product.image}" alt="${product.name}"></div><div class="product-info"><div><h3>${product.name}</h3><p>${this.view.money(product.price)}</p></div><button class="add-button" type="button" data-action="add" data-id="${product.id}">＋</button></div></article>`).join('') || '<p>No products found.</p>'; this.bindDynamic(); };
+    if (menuSearch) menuSearch.oninput = event => { const grid = document.getElementById('posGrid') || document.getElementById('orderingGrid'); const query = event.target.value.toLowerCase(); grid.innerHTML = this.model.products.filter(product => product.name.toLowerCase().includes(query)).map(product => `<article class="product-card"><div class="product-image"><img src="${product.image}" alt="${product.name}"></div><div class="product-info"><div><h3>${product.name}</h3><p>${this.view.money(product.price)}</p></div><button class="add-button" type="button" data-action="add" data-id="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋</button></div></article>`).join('') || '<p>No products found.</p>'; };
 
     const inventorySearch = document.querySelector('[data-action="inventory-search"]');
-    if (inventorySearch) inventorySearch.oninput = event => { const rows = document.getElementById('inventoryRows'); const query = event.target.value.toLowerCase(); rows.innerHTML = this.model.products.filter(product => (product.name + ' ' + product.category).toLowerCase().includes(query)).map(product => `<tr><td><strong>${product.name}</strong></td><td>${product.category}</td><td>${product.stock} cups</td><td>${this.view.money(product.price)}</td><td>${product.stock === 0 ? 'Out of stock' : product.stock <= 5 ? 'Low stock' : 'In stock'}</td><td><button class="row-action" type="button" data-action="manage" data-id="${product.id}">Manage</button></td></tr>`).join(''); this.bindDynamic(); };
+    if (inventorySearch) inventorySearch.oninput = event => { const rows = document.getElementById('inventoryRows'); const query = event.target.value.toLowerCase(); rows.innerHTML = this.model.products.filter(product => (product.name + ' ' + product.category).toLowerCase().includes(query)).map(product => `<tr><td><strong>${product.name}</strong></td><td>${product.category}</td><td>${product.stock} cups</td><td>${this.view.money(product.price)}</td><td>${product.stock === 0 ? 'Out of stock' : product.stock <= 5 ? 'Low stock' : 'In stock'}</td><td><button class="row-action" type="button" data-action="manage" data-id="${product.id}">Manage</button></td></tr>`).join(''); };
 
     const restockForm = document.getElementById('restockForm');
     if (restockForm) restockForm.onsubmit = event => { event.preventDefault(); if (this.model.account.role === 'barista') { if (this.model.requestRestock(document.getElementById('restockProduct').value, document.getElementById('restockQuantity').value)) { this.view.toast('Restock request submitted'); this.navigate('restock'); } } else { const product = this.model.products.find(item => item.id === Number(document.getElementById('restockProduct').value)); product.stock += Number(document.getElementById('restockQuantity').value); this.model.saveProducts(); this.view.toast('Product restocked'); this.navigate('inventory'); } };
+
+    const createAccountForm = document.getElementById('createAccountForm');
+    if (createAccountForm) {
+      createAccountForm.onsubmit = event => {
+        event.preventDefault();
+        try {
+          this.model.createUser({
+            fullName: document.getElementById('newFullName').value.trim(),
+            role: document.getElementById('newRole').value,
+            username: document.getElementById('newUsername').value.trim(),
+            password: document.getElementById('newPassword').value
+          });
+          createAccountForm.reset();
+          this.view.toast('Account created');
+          this.loadAccounts();
+        } catch (error) {
+          this.view.toast(error.message || 'Could not create account');
+        }
+      };
+    }
+  }
+
+  loadAccounts() {
+    const tbody = document.getElementById('accountsTableBody');
+    if (!tbody) return;
+    const users = this.model.fetchUsers();
+    tbody.innerHTML = users.length
+      ? users.map(u => `<tr><td><strong>${u.full_name}</strong></td><td>${u.username}</td><td>${u.role === 'admin' ? 'Admin' : 'Barista'}</td><td><span class="status ${Number(u.is_active) === 1 ? 'done' : 'pending'}">${Number(u.is_active) === 1 ? 'Active' : 'Disabled'}</span></td><td>${u.username === 'admin' ? '—' : `<button class="row-action" type="button" data-action="toggle-user" data-id="${u.id}">${Number(u.is_active) === 1 ? 'Disable' : 'Enable'}</button>`}</td></tr>`).join('')
+      : '<tr><td colspan="5">No accounts found.</td></tr>';
+  }
+
+  toggleUserAccount(button) {
+    try {
+      this.model.toggleUser(button.dataset.id);
+      this.view.toast('Account status updated');
+      this.loadAccounts();
+    } catch (error) {
+      this.view.toast(error.message || 'Could not update account');
+    }
   }
 
   action(button) {
@@ -178,7 +304,9 @@ class AppController {
   }
 
   changeQty(button, change) {
-    this.model.changeCartQuantity(button.dataset.id, change);
+    if (!this.model.changeCartQuantity(button.dataset.id, change) && change > 0) {
+      return this.view.toast('Not enough stock');
+    }
     this.view.renderCart();
   }
 
@@ -195,15 +323,102 @@ class AppController {
 
   confirmPayment() {
     const method = document.getElementById('paymentMethod')?.value || 'Cash';
-    this.model.recordOrder(method);
-    this.model.cart = [];
-    this.view.renderCart();
-    this.view.closeModal();
-    this.view.toast('Order completed and logged');
+    try {
+      const order = this.model.placePosOrder(method);
+      this.model.cart = [];
+      this.view.renderCart();
+      this.view.closeModal();
+      const strip = document.getElementById('posQueueStrip');
+      if (strip) strip.innerHTML = this.view.posQueueStrip();
+      this.view.toast(`Order ${order.id} queued for barista approval`);
+    } catch (error) {
+      this.view.toast(error.message || 'Failed to queue order');
+    }
+  }
+
+  changeOrderStatus(button) {
+    const orderNumber = button.dataset.id;
+    const nextStatus = button.dataset.status;
+    button.disabled = true;
+    try {
+      this.model.updateOrderStatus(orderNumber, nextStatus);
+      const strip = document.getElementById('posQueueStrip');
+      if (strip) strip.innerHTML = this.view.posQueueStrip();
+      const grid = document.getElementById('posGrid');
+      if (grid) grid.innerHTML = this.view.productGrid();
+      if (this.model.module === 'order-queue') this.navigate('order-queue');
+      const labels = { queue: 'Approved to Queue', preparing: 'Moved to Preparing', completed: 'Order Completed', cancelled: 'Order Rejected' };
+      this.view.toast(`${orderNumber}: ${labels[nextStatus] || nextStatus}`);
+    } catch (error) {
+      button.disabled = false;
+      this.view.toast(error.message || 'Status update failed');
+    }
+  }
+
+  showQrModal() {
+    const qrInfo = this.model.fetchQrInfo();
+    this.view.modal('Customer Ordering QR Code', this.view.qrModal(qrInfo));
+    this.bindQrControls();
+    this.renderQrCode();
+  }
+
+  bindQrControls() {
+    const select = document.getElementById('qrNetworkSelect');
+    const urlInput = document.getElementById('qrUrlInput');
+    if (select && urlInput) {
+      select.onchange = () => {
+        urlInput.value = select.value;
+        this.renderQrCode();
+      };
+    }
+    if (urlInput) {
+      urlInput.oninput = () => this.renderQrCode();
+    }
+  }
+
+  refreshQrNetwork() {
+    const qrInfo = this.model.fetchQrInfo();
+    const urlInput = document.getElementById('qrUrlInput');
+    const label = document.getElementById('qrNetworkLabel');
+    if (!urlInput) return;
+    urlInput.value = qrInfo.orderingUrl;
+    if (label) label.textContent = `Network: ${qrInfo.networkAdapter} (${qrInfo.detectedIp})`;
+    this.renderQrCode();
+    this.view.toast(`QR configured for ${qrInfo.networkAdapter} (${qrInfo.detectedIp})`);
+  }
+
+  renderQrCode() {
+    const container = document.getElementById('qrCodeCanvas');
+    const input = document.getElementById('qrUrlInput');
+    if (!container || !input) return;
+    const url = input.value.trim();
+    container.innerHTML = '';
+    const link = document.querySelector('.qr-open-link');
+    if (link) link.href = url;
+    if (typeof QRCode !== 'undefined') {
+      new QRCode(container, { text: url, width: 210, height: 210, colorDark: '#101725', colorLight: '#ffffff' });
+    } else {
+      container.innerHTML = '<p class="login-hint">QR library offline — share or open the URL below.</p>';
+    }
+  }
+
+  copyQrUrl() {
+    const input = document.getElementById('qrUrlInput');
+    if (!input) return;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(input.value).then(() => this.view.toast('Ordering link copied'));
+    } else {
+      input.select();
+      document.execCommand('copy');
+      this.view.toast('Ordering link copied');
+    }
   }
 
   closeSummary() {
+    this.stopLivePolling();
     this.view.closeModal();
+    this.model.account = null;
+    this.model.cart = [];
     document.getElementById('appShell').classList.add('hidden');
     document.getElementById('loginScreen').classList.remove('hidden');
   }
@@ -220,6 +435,7 @@ class AppController {
   setOrderType(button) {
     document.querySelectorAll('[data-action="order-type"]').forEach(i => i.classList.remove('meta-active'));
     button.classList.add('meta-active');
+    this.model.orderType = button.textContent.toLowerCase().includes('take') ? 'take-out' : 'dine-in';
   }
 
   manageProduct(button) {
@@ -261,7 +477,43 @@ class AppController {
     this.bindDynamic();
   }
 
-  logout() { this.view.modal('Shift Summary', this.view.shiftSummary()); this.bindDynamic(); }
+  logout() {
+    this.view.modal('Shift Summary', this.view.shiftSummary());
+    this.bindDynamic();
+    if (this.model.account?.role === 'barista') {
+      this.saveBaristaShiftSales();
+    }
+  }
+
+  saveBaristaShiftSales() {
+    const statusEl = document.getElementById('shiftSaveStatus');
+    try {
+      const result = this.model.saveShiftSalesToDatabase();
+      const shift = this.view.formatShiftPeriod(this.model.shiftStartedAt, result.loggedOutAt || new Date());
+      if (statusEl) {
+        statusEl.className = 'status done';
+        statusEl.textContent = `Saved (${shift.label} · ${result.totalOrders} order(s))`;
+      }
+      this.view.toast('Shift sales record saved');
+    } catch (error) {
+      if (statusEl) {
+        statusEl.className = 'status pending';
+        statusEl.textContent = `Save failed: ${error.message}`;
+      }
+    }
+  }
+
+  loadSavedSalesRecords() {
+    const tbody = document.getElementById('savedShiftSalesBody');
+    if (!tbody) return;
+    const records = this.model.fetchSavedSalesRecords();
+    tbody.innerHTML = records.length
+      ? records.map(record => {
+          const shift = this.view.formatShiftPeriod(record.shift_started_at, record.logged_out_at);
+          return `<tr><td><strong>${shift.label}</strong><br><small style="color:var(--muted)">${shift.range}</small></td><td>${record.account_name}</td><td>${record.total_orders}</td><td>${record.total_items}</td><td>${this.view.money(record.cash_total)}</td><td>${this.view.money(record.gcash_total)}</td><td><strong>${this.view.money(record.total_sales)}</strong></td><td>${new Date(record.logged_out_at.replace(' ', 'T')).toLocaleString('en-PH', { hour12: true })}</td></tr>`;
+        }).join('')
+      : '<tr><td colspan="8">No saved shift sales records yet.</td></tr>';
+  }
 
   primaryAction() { if (this.model.account.role === 'admin') this.navigate('restock'); else if (this.model.module === 'ordering') document.querySelector('[data-action="checkout"]')?.click(); else { this.model.cart = []; this.view.renderCart(); this.view.toast('New POS order started'); } }
 }
