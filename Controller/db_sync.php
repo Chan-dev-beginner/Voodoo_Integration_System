@@ -46,7 +46,10 @@ function fetchProductsPayload(PDO $pdo): array
 {
     $rows = $pdo->query("
         SELECT p.id, p.name, c.name AS category, p.price,
+               p.venti_price,
                COALESCE(p.cup_variant, '16oz') AS cup_variant,
+               p.hot_cup,
+               p.iced_cup,
                COALESCE(cv.quantity, i.quantity, 0) AS stock,
                COALESCE(p.image, 'assets/2.png') AS image
         FROM products p
@@ -54,7 +57,9 @@ function fetchProductsPayload(PDO $pdo): array
         LEFT JOIN cup_variants cv ON cv.variant_key = p.cup_variant
         LEFT JOIN inventory_items i ON i.product_id = p.id
         WHERE p.is_available = 1
-        ORDER BY p.id ASC
+        ORDER BY
+            FIELD(c.name, 'Coffee', 'Frappe', 'Refresher', 'Non-coffee'),
+            p.name ASC
     ")->fetchAll();
 
     return array_map(static fn($r) => [
@@ -62,7 +67,10 @@ function fetchProductsPayload(PDO $pdo): array
         'name' => $r['name'],
         'category' => $r['category'],
         'price' => (float) $r['price'],
+        'ventiPrice' => $r['venti_price'] !== null ? (float) $r['venti_price'] : ($r['category'] === 'Refresher' ? round(((float) $r['price']) + 20, 2) : null),
         'cupVariant' => $r['cup_variant'] ?: '16oz',
+        'hotCup' => $r['hot_cup'] !== null ? $r['hot_cup'] : ($r['category'] === 'Refresher' ? '16oz' : ($r['category'] === 'Coffee' || $r['category'] === 'Frappe' ? 'hot' : '')),
+        'icedCup' => $r['iced_cup'] !== null ? $r['iced_cup'] : ($r['category'] === 'Refresher' ? '22oz' : ($r['category'] === 'Coffee' ? '16oz' : '')),
         'stock' => (int) $r['stock'],
         'image' => $r['image'] ?: 'assets/2.png',
     ], $rows);
@@ -259,9 +267,14 @@ try {
         $name = trim((string) ($body['name'] ?? ''));
         $category = trim((string) ($body['category'] ?? 'Coffee')) ?: 'Coffee';
         $price = round((float) ($body['price'] ?? 0), 2);
+        $ventiPrice = isset($body['ventiPrice']) && $body['ventiPrice'] !== '' && $body['ventiPrice'] !== null
+            ? round((float) $body['ventiPrice'], 2)
+            : ($category === 'Refresher' ? round($price + 20, 2) : null);
+        $hotCup = isset($body['hotCup']) ? trim((string) $body['hotCup']) : '';
+        $icedCup = isset($body['icedCup']) ? trim((string) $body['icedCup']) : '';
         $cupVariant = in_array($body['cupVariant'] ?? '', ['16oz', '22oz', 'hot'], true)
             ? (string) $body['cupVariant']
-            : ($category === 'Refresher' ? '22oz' : '16oz');
+            : ($category === 'Refresher' ? ($icedCup ?: '22oz') : ($hotCup ?: 'hot'));
         $stock = max(0, (int) ($body['stock'] ?? 0));
         $image = trim((string) ($body['image'] ?? 'assets/2.png')) ?: 'assets/2.png';
         $userId = !empty($body['userId']) ? (int) $body['userId'] : null;
@@ -284,11 +297,11 @@ try {
         }
 
         if ($exists) {
-            $pdo->prepare("UPDATE products SET category_id = ?, name = ?, price = ?, cup_variant = ?, image = ?, is_available = 1 WHERE id = ?")
-                ->execute([$categoryId, $name, $price, $cupVariant, $image, $id]);
+            $pdo->prepare("UPDATE products SET category_id = ?, name = ?, price = ?, venti_price = ?, cup_variant = ?, hot_cup = ?, iced_cup = ?, image = ?, is_available = 1 WHERE id = ?")
+                ->execute([$categoryId, $name, $price, $ventiPrice, $cupVariant, $hotCup ?: null, $icedCup ?: null, $image, $id]);
         } else {
-            $pdo->prepare("INSERT INTO products (category_id, name, price, cup_variant, image, is_available) VALUES (?, ?, ?, ?, ?, 1)")
-                ->execute([$categoryId, $name, $price, $cupVariant, $image]);
+            $pdo->prepare("INSERT INTO products (category_id, name, price, venti_price, cup_variant, hot_cup, iced_cup, image, is_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)")
+                ->execute([$categoryId, $name, $price, $ventiPrice, $cupVariant, $hotCup ?: null, $icedCup ?: null, $image]);
             $id = (int) $pdo->lastInsertId();
         }
 
@@ -313,6 +326,16 @@ try {
         }
 
         syncJson(200, ['ok' => true, 'id' => $id]);
+    }
+
+    // POST: Soft-delete product (`is_available = 0`) so order history remains intact
+    if ($method === 'POST' && $action === 'delete_product') {
+        $id = (int) ($body['id'] ?? 0);
+        if ($id <= 0) {
+            syncJson(400, ['ok' => false, 'error' => 'Valid product ID required.']);
+        }
+        $pdo->prepare("UPDATE products SET is_available = 0 WHERE id = ?")->execute([$id]);
+        syncJson(200, ['ok' => true]);
     }
 
     // POST: Save / update cup variant stock in `cup_variants`

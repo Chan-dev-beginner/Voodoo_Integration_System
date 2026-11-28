@@ -18,6 +18,7 @@ class AppController {
       'order-type': b => this.setOrderType(b),
       'manage': b => this.manageProduct(b),
       'save': b => this.saveProduct(b),
+      'delete-product': b => this.deleteProduct(b),
       'manage-cup': b => this.manageCup(b),
       'save-cup': b => this.saveCup(b),
       'view-order': b => this.viewOrder(b),
@@ -202,7 +203,7 @@ class AppController {
   }
 
   logout() {
-    this.view.modal('Shift Summary', this.view.shiftSummary());
+    this.view.modal('Shift Summary', this.view.shiftSummary(), 'shift-summary-modal');
     this.bindDynamic();
   }
 

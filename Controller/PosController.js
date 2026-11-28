@@ -46,20 +46,46 @@ Object.assign(AppController.prototype, {
     if (productsChanged) {
       const grid = document.getElementById('posGrid');
       const searchVal = document.querySelector('[data-action="menu-search"]')?.value?.trim();
-      if (grid && !searchVal) grid.innerHTML = this.view.productGrid();
+      if (grid && !searchVal) {
+        const activeCat = this.model._posActiveCat || 'All';
+        grid.innerHTML = this.view.productGrid(activeCat);
+      }
     }
   },
 
   bindSearchInputs() {
+    // Category tab filtering for POS
+    const catTabs = document.getElementById('posCategoryTabs');
+    if (catTabs) {
+      catTabs.addEventListener('click', event => {
+        const btn = event.target.closest('[data-pos-cat]');
+        if (!btn) return;
+        catTabs.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const cat = btn.dataset.posCat;
+        this.model._posActiveCat = cat;
+        const grid = document.getElementById('posGrid');
+        if (grid) {
+          const products = cat && cat !== 'All'
+            ? this.model.products.filter(p => p.category === cat)
+            : this.model.products;
+          grid.innerHTML = `<div class="menu-grid">${products.map(p => this.view.productCardHtml(p)).join('')}</div>`;
+        }
+      });
+    }
+
     const menuSearch = document.querySelector('[data-action="menu-search"]');
     if (menuSearch) {
       menuSearch.oninput = event => {
         const grid = document.getElementById('posGrid') || document.getElementById('orderingGrid');
         const query = event.target.value.toLowerCase();
-        grid.innerHTML = this.model.products
-          .filter(product => product.name.toLowerCase().includes(query))
-          .map(product => this.view.productCardHtml(product))
-          .join('') || '<p>No products found.</p>';
+        const activeCat = this.model._posActiveCat || 'All';
+        const baseProducts = activeCat && activeCat !== 'All'
+          ? this.model.products.filter(p => p.category === activeCat)
+          : this.model.products;
+        const filtered = baseProducts.filter(product => product.name.toLowerCase().includes(query));
+        grid.innerHTML = `<div class="menu-grid">${filtered.map(product => this.view.productCardHtml(product)).join('')}</div>`
+          || '<p>No products found.</p>';
       };
     }
 
@@ -92,7 +118,7 @@ Object.assign(AppController.prototype, {
             const cupStock = this.model.getCupStock(product.cupVariant);
             const status = cupStock <= 0 ? 'Out of stock' : cupStock <= 10 ? 'Low stock' : 'In stock';
             const statusClass = cupStock <= 0 ? 'stock-out' : cupStock <= 10 ? 'stock-low' : '';
-            const actionCell = isAdmin ? `<td><button class="row-action" type="button" data-action="manage" data-id="${product.id}">Manage</button></td>` : '';
+            const actionCell = isAdmin ? `<td><button class="row-action" type="button" data-action="manage" data-id="${product.id}">Manage</button> <button class="row-action queue-reject" type="button" data-action="delete-product" data-id="${product.id}">Delete</button></td>` : '';
             return `<tr><td><strong>${product.name}</strong></td><td>${product.category}</td><td>${cupLabel} (${cupStock} cups)</td><td>${this.view.money(product.price)}</td><td><span class="${statusClass}">${status}</span></td>${actionCell}</tr>`;
           })
           .join('');
@@ -103,25 +129,69 @@ Object.assign(AppController.prototype, {
   openCupModal(button) {
     const product = this.model.products.find(p => p.id === Number(button.dataset.id));
     if (!product) return;
-    const allowedCups = this.model.getAllowedCupVariants(product.category);
-    const firstAvailable = allowedCups.find(c => Number(c.stock) > 0) || allowedCups[0];
-    const cupCards = allowedCups.map(cup => {
+    const hasCustomCups = product.hotCup || product.icedCup;
+    let optionsList;
+    if (product.category === 'Refresher') {
+      const gPrice = product.price;
+      const vPrice = product.ventiPrice || (product.price + 20);
+      if (hasCustomCups) {
+        optionsList = [];
+        if (product.hotCup) {
+          const c = this.model.getCupVariant(product.hotCup);
+          optionsList.push({ ...c, temp: 'Grande', displayTitle: `Grande (${this.view.money(gPrice)}) — ${c.name}` });
+        }
+        if (product.icedCup) {
+          const c = this.model.getCupVariant(product.icedCup);
+          optionsList.push({ ...c, temp: 'Venti', displayTitle: `Venti (${this.view.money(vPrice)}) — ${c.name}` });
+        }
+      } else {
+        optionsList = [
+          { ...this.model.getCupVariant('16oz'), temp: 'Grande', displayTitle: `Grande (${this.view.money(gPrice)}) — 16oz Cup` },
+          { ...this.model.getCupVariant('22oz'), temp: 'Venti', displayTitle: `Venti (${this.view.money(vPrice)}) — 22oz Cup` }
+        ];
+      }
+    } else if (hasCustomCups) {
+      optionsList = [];
+      if (product.hotCup) {
+        const c = this.model.getCupVariant(product.hotCup);
+        optionsList.push({ ...c, temp: 'Hot', displayTitle: `Hot — ${c.name}` });
+      }
+      if (product.icedCup) {
+        const c = this.model.getCupVariant(product.icedCup);
+        optionsList.push({ ...c, temp: 'Iced', displayTitle: `Iced — ${c.name}` });
+      }
+    } else if (product.category === 'Coffee') {
+      optionsList = [
+        { ...this.model.getCupVariant('hot'), temp: 'Hot', displayTitle: 'Hot — Hot Cup (12oz)' },
+        { ...this.model.getCupVariant('16oz'), temp: 'Iced', displayTitle: 'Iced — 16oz Cup' }
+      ];
+    } else {
+      optionsList = this.model.getAllowedCupVariants(product.category).map(c => ({ ...c, temp: '', displayTitle: c.name }));
+    }
+    const firstAvailable = optionsList.find(c => Number(c.stock) > 0) || optionsList[0];
+    const cupCards = optionsList.map(cup => {
       const disabled = Number(cup.stock) <= 0;
       const checked = firstAvailable && cup.key === firstAvailable.key && !disabled ? 'checked' : '';
       return `<label class="cup-option-card ${disabled ? 'disabled' : ''}">
-        <input type="radio" name="cupModalVariant" value="${cup.key}" ${checked} ${disabled ? 'disabled' : ''}>
+        <input type="radio" name="cupModalVariant" value="${cup.key}" data-temp="${cup.temp}" ${checked} ${disabled ? 'disabled' : ''}>
         <div>
-          <strong>${cup.name}</strong>
+          <strong>${cup.displayTitle}</strong>
           ${disabled ? '<small>Out of stock</small>' : ''}
         </div>
       </label>`;
     }).join('');
-    this.view.modal(`Select Cup — ${product.name}`, `
+    const modalTitle = product.category === 'Refresher'
+      ? `Select Size & Cup — ${product.name}`
+      : (product.category === 'Coffee' || hasCustomCups ? `Select Hot / Iced & Cup — ${product.name}` : `Select Cup — ${product.name}`);
+    const modalPriceDisplay = product.category === 'Refresher' && product.ventiPrice && product.ventiPrice !== product.price
+      ? `${this.view.money(product.price)} (Grande) / ${this.view.money(product.ventiPrice)} (Venti)`
+      : this.view.money(product.price);
+    this.view.modal(modalTitle, `
       <div class="cup-modal-product">
         <img src="${product.image}" alt="${product.name}">
         <div>
           <strong>${product.name}</strong>
-          <p>${product.category} · ${this.view.money(product.price)}</p>
+          <p>${product.category} · ${modalPriceDisplay}</p>
         </div>
       </div>
       <div class="cup-option-grid">${cupCards}</div>
@@ -134,12 +204,17 @@ Object.assign(AppController.prototype, {
     const productId = Number(button.dataset.id);
     const selected = document.querySelector('input[name="cupModalVariant"]:checked');
     if (!selected) return this.view.toast('Selected cup variant is out of stock');
-    if (!this.model.addProductToCart(productId, selected.value, 1)) {
+    const tempType = selected.dataset.temp || '';
+    if (!this.model.addProductToCart(productId, selected.value, 1, tempType)) {
       return this.view.toast(`Not enough ${this.model.getCupLabel(selected.value)} stock`);
     }
     this.view.renderCart();
     this.view.closeModal();
-    this.view.toast(`Added (${this.model.getCupLabel(selected.value)})`);
+    const product = this.model.products.find(p => p.id === productId);
+    const isVenti = (product?.category === 'Refresher' && (tempType === 'Venti' || selected.value === '22oz')) && product?.ventiPrice;
+    const finalPrice = isVenti ? product.ventiPrice : product?.price;
+    const label = tempType ? `${tempType} (${this.view.money(finalPrice)}) · ${this.model.getCupLabel(selected.value)}` : this.model.getCupLabel(selected.value);
+    this.view.toast(`Added (${label})`);
   },
 
   addItem(button) {

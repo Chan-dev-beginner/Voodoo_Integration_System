@@ -122,15 +122,25 @@ function ensureSalesSchema(PDO $pdo): void
         INSERT IGNORE INTO cup_variants (variant_key, name, category_note, quantity, minimum_quantity)
         VALUES (?, ?, ?, ?, ?)
     ");
-    $seedCup->execute(['16oz', '16oz Cup', 'Refreshers', 50, 10]);
+    $seedCup->execute(['16oz', '16oz Cup', 'Cold Coffee & Refreshers', 50, 10]);
     $seedCup->execute(['22oz', '22oz Cup', 'Refreshers', 50, 10]);
-    $seedCup->execute(['hot', 'Hot Cup', 'Coffee & Frappe', 50, 10]);
+    $seedCup->execute(['hot', 'Hot Cup (12oz)', 'Hot Coffee & Frappe', 50, 10]);
 
-    $pdo->exec("UPDATE cup_variants SET category_note = 'Refreshers' WHERE variant_key IN ('16oz', '22oz')");
-    $pdo->exec("UPDATE cup_variants SET category_note = 'Coffee & Frappe' WHERE variant_key = 'hot'");
+    $pdo->exec("UPDATE cup_variants SET category_note = 'Cold Coffee & Refreshers' WHERE variant_key = '16oz'");
+    $pdo->exec("UPDATE cup_variants SET category_note = 'Refreshers' WHERE variant_key = '22oz'");
+    $pdo->exec("UPDATE cup_variants SET name = 'Hot Cup (12oz)', category_note = 'Hot Coffee & Frappe' WHERE variant_key = 'hot'");
 
     if (!$pdo->query("SHOW COLUMNS FROM products LIKE 'cup_variant'")->fetch()) {
         $pdo->exec("ALTER TABLE products ADD COLUMN cup_variant VARCHAR(20) NOT NULL DEFAULT 'hot' AFTER price");
+    }
+    if (!$pdo->query("SHOW COLUMNS FROM products LIKE 'venti_price'")->fetch()) {
+        $pdo->exec("ALTER TABLE products ADD COLUMN venti_price DECIMAL(10,2) NULL DEFAULT NULL AFTER price");
+    }
+    if (!$pdo->query("SHOW COLUMNS FROM products LIKE 'hot_cup'")->fetch()) {
+        $pdo->exec("ALTER TABLE products ADD COLUMN hot_cup VARCHAR(20) NULL DEFAULT NULL AFTER cup_variant");
+    }
+    if (!$pdo->query("SHOW COLUMNS FROM products LIKE 'iced_cup'")->fetch()) {
+        $pdo->exec("ALTER TABLE products ADD COLUMN iced_cup VARCHAR(20) NULL DEFAULT NULL AFTER hot_cup");
     }
     $pdo->exec("
         UPDATE products p
@@ -138,6 +148,20 @@ function ensureSalesSchema(PDO $pdo): void
         SET p.cup_variant = CASE
             WHEN c.name = 'Refresher' THEN IF(p.cup_variant IN ('16oz', '22oz'), p.cup_variant, '22oz')
             ELSE 'hot'
+        END,
+        p.venti_price = CASE
+            WHEN c.name = 'Refresher' THEN COALESCE(p.venti_price, p.price + 20)
+            ELSE p.venti_price
+        END,
+        p.hot_cup = CASE
+            WHEN c.name = 'Refresher' THEN COALESCE(p.hot_cup, '16oz')
+            WHEN c.name = 'Coffee' OR c.name = 'Frappe' THEN COALESCE(p.hot_cup, 'hot')
+            ELSE p.hot_cup
+        END,
+        p.iced_cup = CASE
+            WHEN c.name = 'Refresher' THEN COALESCE(p.iced_cup, '22oz')
+            WHEN c.name = 'Coffee' THEN COALESCE(p.iced_cup, '16oz')
+            ELSE p.iced_cup
         END
     ");
 
@@ -148,6 +172,8 @@ function ensureSalesSchema(PDO $pdo): void
     if (!$pdo->query("SHOW COLUMNS FROM order_items LIKE 'cup_variant'")->fetch()) {
         $pdo->exec("ALTER TABLE order_items ADD COLUMN cup_variant VARCHAR(20) NULL AFTER product_id");
     }
+
+    $pdo->prepare("INSERT IGNORE INTO categories (name) VALUES (?)")->execute(['Non-coffee']);
 }
 
 /**

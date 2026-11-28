@@ -209,7 +209,7 @@ Object.assign(AppController.prototype, {
     const record = records.find((r, idx) => String(r.shift_key || r.id || idx) === String(key));
     if (!record) return this.view.toast('Shift record not found');
     const html = this.view.shiftRecordSummaryHtml(record);
-    this.view.modal('Shift Summary', `${html}<div class="summary-actions" style="margin-top:14px;"><button class="secondary-action" type="button" data-action="close">Close</button><button class="primary-action" type="button" data-action="download-shift-pdf" data-shift-key="${key}">Download PDF</button></div>`);
+    this.view.modal('Shift Summary', `${html}<div class="summary-actions" style="margin-top:14px;"><button class="secondary-action" type="button" data-action="close">Close</button><button class="primary-action" type="button" data-action="download-shift-pdf" data-shift-key="${key}">Download PDF</button></div>`, 'shift-summary-modal');
     this.bindDynamic();
   },
 
@@ -221,7 +221,7 @@ Object.assign(AppController.prototype, {
 
     const html = this.view.shiftRecordSummaryHtml(record);
     if (typeof html2pdf === 'undefined') {
-      this.view.modal('Shift Sales Summary', html);
+      this.view.modal('Shift Sales Summary', html, 'shift-summary-modal');
       this.view.toast('PDF library not loaded, opening print dialog');
       return window.print();
     }

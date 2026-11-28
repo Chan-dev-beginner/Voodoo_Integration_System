@@ -58,9 +58,17 @@
 }
 
 .shift-summary {
-  width: min(680px, 100%);
+  width: 100%;
+  max-width: 680px;
   min-width: 0;
   margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.modal-card.shift-summary-modal,
+.modal-card:has(.shift-summary) {
+  width: min(720px, calc(100vw - 32px));
+  max-width: min(720px, calc(100vw - 32px));
 }
 
 .shift-summary-header {

@@ -9,12 +9,25 @@ Object.assign(AppView.prototype, {
       return `<tr><td><strong>${cup.name}</strong></td><td>${cup.usedFor || '—'}</td><td><strong>${cup.stock} cups</strong></td><td><span class="${statusClass}">${status}</span></td>${actionCell}</tr>`;
     }).join('');
     const rows = this.model.products.map(product => {
-      const cupLabel = this.model.getCupLabel(product.cupVariant);
+      const isRef = product.category === 'Refresher';
+      let cupLabel;
+      if (isRef) {
+        const gName = this.model.getCupLabel(product.hotCup || '16oz');
+        const vName = this.model.getCupLabel(product.icedCup || '22oz');
+        cupLabel = `Grande: ${gName} / Venti: ${vName}`;
+      } else if (product.hotCup && product.icedCup) {
+        cupLabel = `Hot: ${this.model.getCupLabel(product.hotCup)} / Iced: ${this.model.getCupLabel(product.icedCup)}`;
+      } else {
+        cupLabel = this.model.getCupLabel(product.cupVariant || product.hotCup || product.icedCup);
+      }
       const cupStock = this.model.getCupStock(product.cupVariant);
       const status = cupStock <= 0 ? 'Out of stock' : cupStock <= 10 ? 'Low stock' : 'In stock';
       const statusClass = cupStock <= 0 ? 'stock-out' : cupStock <= 10 ? 'stock-low' : '';
-      const actionCell = isAdmin ? `<td><button class="row-action" type="button" data-action="manage" data-id="${product.id}">Manage</button></td>` : '';
-      return `<tr><td><strong>${product.name}</strong></td><td>${product.category}</td><td>${cupLabel} (${cupStock} cups)</td><td>${this.money(product.price)}</td><td><span class="${statusClass}">${status}</span></td>${actionCell}</tr>`;
+      const actionCell = isAdmin ? `<td><button class="row-action" type="button" data-action="manage" data-id="${product.id}">Manage</button> <button class="row-action queue-reject" type="button" data-action="delete-product" data-id="${product.id}">Delete</button></td>` : '';
+      const priceLabel = isRef && product.ventiPrice && product.ventiPrice !== product.price
+        ? `Grande: ${this.money(product.price)}<br><small style="color:var(--muted)">Venti: ${this.money(product.ventiPrice)}</small>`
+        : this.money(product.price);
+      return `<tr><td><strong>${product.name}</strong></td><td>${product.category}</td><td>${cupLabel}</td><td>${priceLabel}</td><td><span class="${statusClass}">${status}</span></td>${actionCell}</tr>`;
     }).join('');
     const topBar = isAdmin
       ? `<div class="inventory-tools"><label class="search"><span>⌕</span><input type="search" data-action="inventory-search" placeholder="Search product or cup variant"></label><div class="module-actions"><button class="secondary-action" type="button" data-action="import">Import</button><button class="primary-action" type="button" data-action="manage">＋ Add Product</button></div></div>`

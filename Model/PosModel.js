@@ -1,22 +1,29 @@
 Object.assign(AppModel.prototype, {
-  addProductToCart(id, cupVariant, quantity = 1) {
+  addProductToCart(id, cupVariant, quantity = 1, tempType = '') {
     const product = this.products.find(item => item.id === Number(id));
     if (!product) return false;
-    const allowed = this.getAllowedCupKeys(product.category);
-    const cupKey = allowed.includes(cupVariant) ? cupVariant : allowed[0];
+    const customAllowed = [product.hotCup, product.icedCup].filter(Boolean);
+    const allowed = customAllowed.length ? customAllowed : this.getAllowedCupKeys(product.category);
+    const cupKey = allowed.includes(cupVariant) ? cupVariant : (allowed[0] || cupVariant);
     const cupStock = this.getCupStock(cupKey);
     const usedInCart = this.getCartCupUsage(cupKey);
     const qty = Math.max(1, Number(quantity) || 1);
     if (cupStock <= 0 || usedInCart + qty > cupStock) return false;
-    const cartKey = `${product.id}_${cupKey}`;
+    const cartKey = `${product.id}_${cupKey}${tempType ? '_' + tempType : ''}`;
+    const labelBase = this.getCupLabel(cupKey);
+    const cupLabel = tempType ? `${tempType} · ${labelBase}` : labelBase;
     const cartItem = this.cart.find(item => (item.cartKey || `${item.id}_${item.cupVariant || allowed[0]}`) === cartKey);
+    const isVenti = (product.category === 'Refresher' && (tempType === 'Venti' || cupKey === '22oz' || cupKey === product.icedCup)) && product.ventiPrice;
+    const unitPrice = isVenti ? product.ventiPrice : product.price;
     if (cartItem) {
       cartItem.quantity += qty;
     } else {
       this.cart.push({
         ...product,
+        price: unitPrice,
         cupVariant: cupKey,
-        cupLabel: this.getCupLabel(cupKey),
+        tempType: tempType || '',
+        cupLabel,
         cartKey,
         quantity: qty
       });

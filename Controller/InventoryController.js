@@ -53,13 +53,56 @@ Object.assign(AppController.prototype, {
 
   manageProduct(button) {
     const product = button.dataset.id ? this.model.products.find(i => i.id === Number(button.dataset.id)) : null;
-    const categoryOptions = ['Coffee', 'Frappe', 'Refresher']
+    const categoryOptions = ['Coffee', 'Frappe', 'Refresher', 'Non-coffee']
       .map(cat => `<option ${product?.category === cat ? 'selected' : ''}>${cat}</option>`)
       .join('');
-    const cupOptions = (this.model.cupVariants || [])
-      .map(cup => `<option value="${cup.key}" ${product?.cupVariant === cup.key ? 'selected' : ''}>${cup.name} (${cup.stock} left)</option>`)
-      .join('');
-    this.view.modal(product ? 'Manage ' + product.name : 'Add Product', `<div class="form-grid"><label>Product name<input id="productName" value="${product ? product.name : ''}"></label><label>Category<select id="productCategory">${categoryOptions}</select></label><label>Cup Variant<select id="productCupVariant">${cupOptions}</select></label><label>Price<input id="productPrice" type="number" min="1" value="${product ? product.price : 150}"></label></div><button class="primary-action" type="button" data-action="save" data-id="${product ? product.id : ''}">Save</button>`);
+    const isRefresher = (product?.category || 'Coffee') === 'Refresher';
+    const curHot = product
+      ? (product.hotCup !== undefined && product.hotCup !== null && product.hotCup !== '' ? product.hotCup : (isRefresher ? '16oz' : (product.category === 'Coffee' || product.category === 'Frappe' ? 'hot' : '')))
+      : (isRefresher ? '16oz' : 'hot');
+    const curIced = product
+      ? (product.icedCup !== undefined && product.icedCup !== null && product.icedCup !== '' ? product.icedCup : (isRefresher ? '22oz' : (product.category === 'Coffee' ? '16oz' : '')))
+      : (isRefresher ? '22oz' : '16oz');
+    const curVentiPrice = product?.ventiPrice ? product.ventiPrice : (product ? product.price + 20 : 170);
+    const buildCupOpts = selectedVal => [
+      `<option value="" ${!selectedVal ? 'selected' : ''}>None</option>`,
+      ...(this.model.cupVariants || []).map(cup => `<option value="${cup.key}" ${selectedVal === cup.key ? 'selected' : ''}>${cup.name} (${cup.stock} left)</option>`)
+    ].join('');
+    this.view.modal(product ? 'Manage ' + product.name : 'Add Product', `<div class="form-grid"><label>Product name<input id="productName" value="${product ? product.name : ''}"></label><label>Category<select id="productCategory">${categoryOptions}</select></label><label><span id="labelCupSlot1">${isRefresher ? 'Grande Cup Variant' : 'Hot Cup Variant'}</span><select id="productHotCup">${buildCupOpts(curHot)}</select></label><label><span id="labelCupSlot2">${isRefresher ? 'Venti Cup Variant' : 'Iced Cup Variant'}</span><select id="productIcedCup">${buildCupOpts(curIced)}</select></label><label id="wrapPrice"><span id="labelProductPrice">${isRefresher ? 'Grande Price (₱)' : 'Price (₱)'}</span><input id="productPrice" type="number" min="1" value="${product ? product.price : 150}"></label><label id="wrapVentiPrice" style="${isRefresher ? '' : 'display:none;'}"><span id="labelVentiPrice">Venti Price (₱)</span><input id="productVentiPrice" type="number" min="1" value="${curVentiPrice}"></label></div><button class="primary-action" type="button" data-action="save" data-id="${product ? product.id : ''}">Save</button>`);
+    const catSel = document.getElementById('productCategory');
+    const lbl1 = document.getElementById('labelCupSlot1');
+    const lbl2 = document.getElementById('labelCupSlot2');
+    const sel1 = document.getElementById('productHotCup');
+    const sel2 = document.getElementById('productIcedCup');
+    const lblPrice = document.getElementById('labelProductPrice');
+    const wrapVenti = document.getElementById('wrapVentiPrice');
+    const updateCupLabelsAndDefaults = (forceDefaults = false) => {
+      const cat = catSel.value;
+      const ref = cat === 'Refresher';
+      if (lbl1) lbl1.textContent = ref ? 'Grande Cup Variant' : (cat === 'Coffee' ? 'Hot Cup Variant' : (cat === 'Frappe' ? 'Hot Cup (12oz) Variant' : 'Hot / Regular Cup Variant'));
+      if (lbl2) lbl2.textContent = ref ? 'Venti Cup Variant' : (cat === 'Coffee' ? 'Iced Cup Variant' : (cat === 'Frappe' ? 'Iced Cup Variant (Optional)' : 'Iced / Large Cup Variant'));
+      if (lblPrice) lblPrice.textContent = ref ? 'Grande Price (₱)' : 'Price (₱)';
+      if (wrapVenti) wrapVenti.style.display = ref ? '' : 'none';
+      if (forceDefaults || !product) {
+        if (ref) {
+          if (sel1) sel1.value = '16oz';
+          if (sel2) sel2.value = '22oz';
+        } else if (cat === 'Coffee') {
+          if (sel1) sel1.value = 'hot';
+          if (sel2) sel2.value = '16oz';
+        } else if (cat === 'Frappe') {
+          if (sel1) sel1.value = 'hot';
+          if (sel2) sel2.value = '';
+        } else if (cat === 'Non-coffee') {
+          if (sel1 && !sel1.value) sel1.value = '16oz';
+          if (sel2 && !sel2.value) sel2.value = '22oz';
+        }
+      }
+    };
+    if (catSel) {
+      catSel.onchange = () => updateCupLabelsAndDefaults(true);
+      catSel.oninput = () => updateCupLabelsAndDefaults(true);
+    }
     this.bindDynamic();
   },
 
@@ -67,17 +110,30 @@ Object.assign(AppController.prototype, {
     const name = document.getElementById('productName').value.trim();
     if (!name) return this.view.toast('Product name required');
     const category = document.getElementById('productCategory').value;
-    const cupVariant = document.getElementById('productCupVariant').value || '16oz';
+    const hotCup = document.getElementById('productHotCup')?.value || '';
+    const icedCup = document.getElementById('productIcedCup')?.value || '';
+    const isRef = category === 'Refresher';
+    if (!hotCup && !icedCup) {
+      return this.view.toast(isRef ? 'Please select at least one cup variant (Grande or Venti)' : 'Please select at least one cup variant (Hot or Iced)');
+    }
+    const cupVariant = isRef ? (icedCup || hotCup || '22oz') : (icedCup || hotCup || '16oz');
+    const tempType = hotCup && icedCup ? 'both' : (hotCup ? (isRef ? 'Grande' : 'Hot') : (isRef ? 'Venti' : 'Iced'));
     const stock = this.model.getCupStock(cupVariant);
     const price = Number(document.getElementById('productPrice').value);
     if (isNaN(price) || price <= 0) return this.view.toast('Price must be greater than 0');
+    let ventiPrice = null;
+    if (isRef) {
+      const vVal = Number(document.getElementById('productVentiPrice')?.value);
+      if (isNaN(vVal) || vVal <= 0) return this.view.toast('Venti price must be greater than 0');
+      ventiPrice = vVal;
+    }
     const id = button.dataset.id;
     let targetProduct;
     if (id) {
       targetProduct = this.model.products.find(i => i.id === Number(id));
-      Object.assign(targetProduct, { name, category, cupVariant, stock, price });
+      Object.assign(targetProduct, { name, category, tempType, hotCup, icedCup, cupVariant, stock, price, ventiPrice });
     } else {
-      targetProduct = new Product(Date.now(), name, category, price, stock, 'assets/2.png', cupVariant);
+      targetProduct = new Product(Date.now(), name, category, price, stock, 'assets/2.png', cupVariant, tempType, hotCup, icedCup, ventiPrice);
       this.model.products.push(targetProduct);
     }
     this.model.saveProducts();
@@ -86,7 +142,10 @@ Object.assign(AppController.prototype, {
       name,
       category,
       cupVariant,
+      hotCup,
+      icedCup,
       price,
+      ventiPrice,
       stock,
       image: targetProduct.image || 'assets/2.png',
       userId: this.model.account?.id || null
@@ -97,6 +156,18 @@ Object.assign(AppController.prototype, {
       }
     });
     this.view.closeModal();
+    this.navigate('inventory');
+  },
+
+  deleteProduct(button) {
+    const id = Number(button.dataset.id);
+    const product = this.model.products.find(p => p.id === id);
+    if (!product) return;
+    if (!confirm(`Delete "${product.name}" from the menu?`)) return;
+    this.model.products = this.model.products.filter(p => p.id !== id);
+    this.model.saveProducts();
+    this.model.syncToDb('delete_product', { id });
+    this.view.toast(`${product.name} deleted`);
     this.navigate('inventory');
   },
 
@@ -151,7 +222,7 @@ Object.assign(AppController.prototype, {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        const categories = ['Coffee', 'Frappe', 'Refresher'];
+        const categories = ['Coffee', 'Frappe', 'Refresher', 'Non-coffee'];
         const lines = String(reader.result).split(/\r?\n/).filter(line => line.trim());
         let count = 0;
         lines.slice(1).forEach(line => {

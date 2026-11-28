@@ -11,7 +11,7 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600;700&family=Oxanium:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20261128-PAY1">
+  <link rel="stylesheet" href="assets/styles.css?v=20261128-MOD9">
 </head>
 <body class="customer-ordering-body">
   <header class="customer-header">
@@ -48,6 +48,7 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
           <button type="button" data-cat="Coffee">Coffee</button>
           <button type="button" data-cat="Frappe">Frappe</button>
           <button type="button" data-cat="Refresher">Refresher</button>
+          <button type="button" data-cat="Non-coffee">Non-coffee</button>
         </div>
       </div>
 
@@ -97,9 +98,9 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
   <script>
     (() => {
       const DEFAULT_CUP_VARIANTS = [
-        { key: '16oz', name: '16oz Cup', usedFor: 'Refreshers', stock: 50, minStock: 10 },
+        { key: '16oz', name: '16oz Cup', usedFor: 'Cold Coffee & Refreshers', stock: 50, minStock: 10 },
         { key: '22oz', name: '22oz Cup', usedFor: 'Refreshers', stock: 50, minStock: 10 },
-        { key: 'hot', name: 'Hot Cup', usedFor: 'Coffee & Frappe', stock: 50, minStock: 10 }
+        { key: 'hot', name: 'Hot Cup (12oz)', usedFor: 'Hot Coffee & Frappe', stock: 50, minStock: 10 }
       ];
 
       const DEFAULT_PRODUCTS = [
@@ -137,13 +138,18 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         trackedName: localStorage.getItem('voodooCustomerOrderName') || ''
       };
 
-      const getAllowedCupKeys = category => (category === 'Refresher' ? ['16oz', '22oz'] : ['hot']);
+      const getAllowedCupKeys = category => {
+        if (category === 'Refresher') return ['16oz', '22oz'];
+        if (category === 'Coffee') return ['hot', '16oz'];
+        if (category === 'Non-coffee') return ['16oz', '22oz', 'hot'];
+        return ['hot'];
+      };
       const getAllowedCupVariants = category => {
         const keys = getAllowedCupKeys(category);
         return (state.cupVariants || []).filter(c => keys.includes(c.key));
       };
       const inferCupVariant = p => (p.category === 'Refresher' ? (['16oz', '22oz'].includes(p.cupVariant) ? p.cupVariant : '22oz') : 'hot');
-      const getCupVariant = key => state.cupVariants.find(c => c.key === key) || { key: 'hot', name: 'Hot Cup', stock: 0 };
+      const getCupVariant = key => state.cupVariants.find(c => c.key === key) || { key: 'hot', name: 'Hot Cup (12oz)', stock: 0 };
       const getCupStock = key => Number(getCupVariant(key)?.stock || 0);
       const getCupLabel = key => getCupVariant(key)?.name || '16oz Cup';
       const getCartCupUsage = cupKey => state.cart.reduce((sum, item) => (inferCupVariant(item) === cupKey ? sum + Number(item.quantity || 0) : sum), 0);
@@ -173,16 +179,26 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
           (state.category === 'All' || p.category === state.category) &&
           p.name.toLowerCase().includes(query)
         );
+        // Sort to match POS: Coffee → Frappe → Refresher → Non-coffee, then by name
+        const catOrder = { 'Coffee': 0, 'Frappe': 1, 'Refresher': 2, 'Non-coffee': 3 };
+        filtered.sort((a, b) => {
+          const catDiff = (catOrder[a.category] ?? 99) - (catOrder[b.category] ?? 99);
+          if (catDiff !== 0) return catDiff;
+          return a.name.localeCompare(b.name);
+        });
         grid.innerHTML = filtered.map(product => {
           const allowedCups = getAllowedCupVariants(product.category);
           const totalAvailable = allowedCups.reduce((sum, c) => sum + Number(c.stock || 0), 0);
+          const priceDisplay = product.category === 'Refresher' && product.ventiPrice && product.ventiPrice !== product.price
+            ? `${money(product.price)} / ${money(product.ventiPrice)}`
+            : money(product.price);
           return `
           <article class="product-card" data-product-card="${product.id}" style="cursor:pointer;">
             <div class="product-image"><img src="${product.image}" alt="${product.name}"></div>
             <div class="product-info">
               <div>
                 <h3>${product.name}</h3>
-                <p>${money(product.price)}${totalAvailable <= 0 ? ' · Out of stock' : ''}</p>
+                <p>${priceDisplay}${totalAvailable <= 0 ? ' · Out of stock' : ''}</p>
               </div>
               <button class="add-button" type="button" data-open-cup="${product.id}" ${totalAvailable <= 0 ? 'disabled' : ''}>＋ Add</button>
             </div>
@@ -200,27 +216,71 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
       const openCustomerCupModal = productId => {
         const product = state.products.find(p => p.id === productId);
         if (!product) return;
-        const allowedCups = getAllowedCupVariants(product.category);
-        const firstAvailable = allowedCups.find(c => Number(c.stock) > 0) || allowedCups[0];
-        const cupCards = allowedCups.map(cup => {
+        const hasCustomCups = product.hotCup || product.icedCup;
+        let optionsList;
+        if (product.category === 'Refresher') {
+          const gPrice = product.price;
+          const vPrice = product.ventiPrice || (product.price + 20);
+          if (hasCustomCups) {
+            optionsList = [];
+            if (product.hotCup) {
+              const c = getCupVariant(product.hotCup);
+              optionsList.push({ ...c, temp: 'Grande', displayTitle: `Grande (${money(gPrice)}) — ${c.name}` });
+            }
+            if (product.icedCup) {
+              const c = getCupVariant(product.icedCup);
+              optionsList.push({ ...c, temp: 'Venti', displayTitle: `Venti (${money(vPrice)}) — ${c.name}` });
+            }
+          } else {
+            optionsList = [
+              { ...getCupVariant('16oz'), temp: 'Grande', displayTitle: `Grande (${money(gPrice)}) — 16oz Cup` },
+              { ...getCupVariant('22oz'), temp: 'Venti', displayTitle: `Venti (${money(vPrice)}) — 22oz Cup` }
+            ];
+          }
+        } else if (hasCustomCups) {
+          optionsList = [];
+          if (product.hotCup) {
+            const c = getCupVariant(product.hotCup);
+            optionsList.push({ ...c, temp: 'Hot', displayTitle: `Hot — ${c.name}` });
+          }
+          if (product.icedCup) {
+            const c = getCupVariant(product.icedCup);
+            optionsList.push({ ...c, temp: 'Iced', displayTitle: `Iced — ${c.name}` });
+          }
+        } else if (product.category === 'Coffee') {
+          optionsList = [
+            { ...getCupVariant('hot'), temp: 'Hot', displayTitle: 'Hot — Hot Cup (12oz)' },
+            { ...getCupVariant('16oz'), temp: 'Iced', displayTitle: 'Iced — 16oz Cup' }
+          ];
+        } else {
+          optionsList = getAllowedCupVariants(product.category).map(c => ({ ...c, temp: '', displayTitle: c.name }));
+        }
+        const firstAvailable = optionsList.find(c => Number(c.stock) > 0) || optionsList[0];
+        const cupCards = optionsList.map(cup => {
           const disabled = Number(cup.stock) <= 0;
           const checked = firstAvailable && cup.key === firstAvailable.key && !disabled ? 'checked' : '';
           return `<label class="cup-option-card ${disabled ? 'disabled' : ''}">
-            <input type="radio" name="customerCupVariant" value="${cup.key}" ${checked} ${disabled ? 'disabled' : ''}>
+            <input type="radio" name="customerCupVariant" value="${cup.key}" data-temp="${cup.temp}" ${checked} ${disabled ? 'disabled' : ''}>
             <div>
-              <strong>${cup.name}</strong>
+              <strong>${cup.displayTitle}</strong>
               ${disabled ? '<small>Out of stock</small>' : ''}
             </div>
           </label>`;
         }).join('');
         const modal = document.getElementById('actionModal');
         modal.classList.add('open');
+        const modalTitle = product.category === 'Refresher'
+          ? `Select Size & Cup — ${product.name}`
+          : (product.category === 'Coffee' || hasCustomCups ? `Select Hot / Iced & Cup — ${product.name}` : `Select Cup — ${product.name}`);
+        const modalPriceDisplay = product.category === 'Refresher' && product.ventiPrice && product.ventiPrice !== product.price
+          ? `${money(product.price)} (Grande) / ${money(product.ventiPrice)} (Venti)`
+          : money(product.price);
         modal.innerHTML = `<div class="modal-backdrop"><div class="modal-card">
-          <div class="data-head"><h2>Select Cup — ${product.name}</h2><button class="row-action" type="button" id="closeCustomerCupModal">×</button></div>
+          <div class="data-head"><h2>${modalTitle}</h2><button class="row-action" type="button" id="closeCustomerCupModal">×</button></div>
           <div class="modal-body">
             <div class="cup-modal-product">
               <img src="${product.image}" alt="${product.name}">
-              <div><strong>${product.name}</strong><p>${product.category} · ${money(product.price)}</p></div>
+              <div><strong>${product.name}</strong><p>${product.category} · ${modalPriceDisplay}</p></div>
             </div>
             <div class="cup-option-grid">${cupCards}</div>
             <button class="primary-action" type="button" id="confirmCustomerCupAdd" data-id="${product.id}" style="width:100%;margin-top:14px;">Add to Cart</button>
@@ -234,7 +294,7 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         list.innerHTML = state.cart.length
           ? state.cart.map(item => {
             const key = item.cartKey || `${item.id}_${inferCupVariant(item)}`;
-            const cupLabel = getCupLabel(item.cupVariant || inferCupVariant(item));
+            const cupLabel = item.cupLabel || getCupLabel(item.cupVariant || inferCupVariant(item));
             return `
             <div class="cart-item">
               <img src="${item.image}" alt="">
@@ -303,13 +363,17 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         `;
       };
 
+      // Always clear cached products on page load so stale demo data never shows.
+      // Products are always loaded fresh from the database.
+      localStorage.removeItem('voodooProducts');
+
       let lastDbProductSync = 0;
       const loadProducts = async (forceDb = false) => {
         const now = Date.now();
-        if (forceDb || now - lastDbProductSync > 15000) {
+        if (forceDb || now - lastDbProductSync > 5000) {
           lastDbProductSync = now;
           try {
-            const resp = await fetch('Controller/db_sync.php?action=get_products');
+            const resp = await fetch('Controller/db_sync.php?action=get_products&_=' + Date.now(), { cache: 'no-store' });
             const data = await resp.json();
             if (data.ok && Array.isArray(data.products) && data.products.length) {
               if (Array.isArray(data.cupVariants) && data.cupVariants.length) {
@@ -317,19 +381,17 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
                 saveStore('voodooCupVariants', state.cupVariants);
               }
               state.products = data.products;
-              saveStore('voodooProducts', state.products);
               renderMenu();
               return;
             }
-          } catch (err) { /* fallback to localStorage */ }
+          } catch (err) { /* network error — keep current state */ }
         }
-        state.cupVariants = loadStore('voodooCupVariants', DEFAULT_CUP_VARIANTS);
-        state.products = loadStore('voodooProducts', DEFAULT_PRODUCTS).map(p => ({
-          ...p,
-          cupVariant: inferCupVariant(p),
-          stock: getCupStock(inferCupVariant(p))
-        }));
-        renderMenu();
+        // Only fall back to memory state (don't use localStorage for products)
+        if (!state.products.length) {
+          state.cupVariants = loadStore('voodooCupVariants', DEFAULT_CUP_VARIANTS);
+          state.products = [];
+          renderMenu();
+        }
       };
 
       const pollTrackedOrder = async (notifyIfMissing = false) => {
@@ -361,23 +423,28 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
           const selected = document.querySelector('input[name="customerCupVariant"]:checked');
           if (!product || !selected) return toast('Selected cup variant is out of stock');
           const cupKey = selected.value;
+          const tempType = selected.dataset.temp || '';
           const cupStock = getCupStock(cupKey);
-          const cupLabel = getCupLabel(cupKey);
+          const cupLabel = tempType ? `${tempType} · ${getCupLabel(cupKey)}` : getCupLabel(cupKey);
           const qtyToAdd = 1;
           const usedCups = getCartCupUsage(cupKey);
           if (usedCups + qtyToAdd > cupStock) {
-            return toast(`Only ${Math.max(0, cupStock - usedCups)} ${cupLabel}(s) left`);
+            return toast(`Only ${Math.max(0, cupStock - usedCups)} ${getCupLabel(cupKey)}(s) left`);
           }
-          const cartKey = `${id}_${cupKey}`;
+          const cartKey = `${id}_${cupKey}${tempType ? '_' + tempType : ''}`;
           const existing = state.cart.find(c => (c.cartKey || `${c.id}_${inferCupVariant(c)}`) === cartKey);
+          const isVenti = (product.category === 'Refresher' && (tempType === 'Venti' || cupKey === '22oz' || cupKey === product.icedCup)) && product.ventiPrice;
+          const unitPrice = isVenti ? product.ventiPrice : product.price;
           if (existing) {
             existing.quantity += qtyToAdd;
           } else {
-            state.cart.push({ ...product, cupVariant: cupKey, cartKey, quantity: qtyToAdd });
+            state.cart.push({ ...product, price: unitPrice, cupVariant: cupKey, tempType, cupLabel, cartKey, quantity: qtyToAdd });
           }
           renderCart();
           closeCupModal();
-          return toast(`Added ${product.name} (${cupLabel})`);
+          const finalPrice = isVenti ? product.ventiPrice : product.price;
+          const label = tempType ? `${tempType} (${money(finalPrice)}) · ${getCupLabel(cupKey)}` : getCupLabel(cupKey);
+          return toast(`Added ${product.name} (${label})`);
         }
 
         const openBtn = event.target.closest('[data-open-cup]');
@@ -555,12 +622,16 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
       };
 
       window.addEventListener('storage', () => {
-        loadProducts();
         pollTrackedOrder();
       });
 
+      // Force fresh DB fetch when user switches back to this tab
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) loadProducts(true);
+      });
+
       checkBaristaOnline();
-      loadProducts();
+      loadProducts(true);
       renderCart();
       pollTrackedOrder();
       setInterval(() => {

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600;700&family=Oxanium:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20261128-MOD7">
+  <link rel="stylesheet" href="assets/styles.css?v=20261128-MOD8">
 </head>
 <body>
   <section class="login-screen" id="loginScreen">
@@ -43,23 +43,23 @@
   <div class="toast" id="toast" role="status"></div>
   <div id="actionModal"></div>
   <script>window.VOODOO_QR_INFO = <?= json_encode(getCustomerOrderingDetails(), JSON_UNESCAPED_SLASHES) ?>;</script>
-  <script src="Model/AppModel.js?v=20261128-CUP3"></script>
+  <script src="Model/AppModel.js?v=20261128-GV3"></script>
   <script src="Model/AuthModel.js?v=20261125-MOD12"></script>
-  <script src="Model/PosModel.js?v=20261128-CUP4"></script>
+  <script src="Model/PosModel.js?v=20261128-GV5"></script>
   <script src="Model/InventoryModel.js?v=20261128-CUP1"></script>
   <script src="Model/SalesModel.js?v=20261128-PDF1"></script>
   <script src="View/AppView.js?v=20261125-MOD13"></script>
   <script src="View/DashboardView.js?v=20261128-CUP1"></script>
-  <script src="View/PosView.js?v=20261128-CUP4"></script>
+  <script src="View/PosView.js?v=20261128-GV4"></script>
   <script src="View/QueueView.js?v=20261128-QUE1"></script>
-  <script src="View/InventoryView.js?v=20261128-INV3"></script>
+  <script src="View/InventoryView.js?v=20261128-GV3"></script>
   <script src="View/SalesView.js?v=20261128-PDF2"></script>
   <script src="View/AdminView.js?v=20261125-MOD10"></script>
-  <script src="Controller/AppController.js?v=20261128-SHF2"></script>
-  <script src="Controller/PosController.js?v=20261128-INV1"></script>
+  <script src="Controller/AppController.js?v=20261128-GV2"></script>
+  <script src="Controller/PosController.js?v=20261128-GV4"></script>
   <script src="Controller/QueueController.js?v=20261128-QR3"></script>
-  <script src="Controller/InventoryController.js?v=20261128-INV2"></script>
-  <script src="Controller/SalesController.js?v=20261128-SHF2"></script>
+  <script src="Controller/InventoryController.js?v=20261128-GV3"></script>
+  <script src="Controller/SalesController.js?v=20261128-GV2"></script>
   <script src="Controller/AccountsController.js?v=20261125-MOD10"></script>
   <script src="Controller/AppBootstrap.js?v=20261125-MOD12"></script>
   <script src="assets/qrcode.min.js?v=20261125-QR2"></script>
