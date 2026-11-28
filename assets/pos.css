@@ -142,6 +142,106 @@
   font-size: 12px;
 }
 
+.product-details {
+  min-width: 0;
+  flex: 1;
+}
+
+.cup-select {
+  margin-top: 6px;
+  width: 100%;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8f9fc;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 6px;
+}
+
+.pos-customer-input {
+  width: 100%;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 11px;
+  font-size: 13px;
+  margin-bottom: 10px;
+  background: #fafbfe;
+}
+
+.pos-customer-input:focus {
+  outline: none;
+  border-color: var(--purple);
+  background: white;
+}
+
+.cup-modal-product {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cup-modal-product img {
+  width: 54px;
+  height: 54px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.cup-modal-product strong {
+  display: block;
+  font-size: 15px;
+}
+
+.cup-modal-product p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.cup-option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.cup-option-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+  background: #fafbfe;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.cup-option-card:has(input:checked) {
+  border-color: var(--purple);
+  background: var(--purple-2);
+}
+
+.cup-option-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cup-option-card strong {
+  display: block;
+  font-size: 13px;
+}
+
+.cup-option-card small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .add-button {
   flex-shrink: 0;
   width: 42px;

@@ -444,3 +444,19 @@
   color: var(--purple);
   font-weight: 600;
 }
+
+.customer-change-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  background: #f5f3ff;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.customer-change-row strong {
+  font-size: 13px;
+}

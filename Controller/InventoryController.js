@@ -10,12 +10,13 @@ Object.assign(AppController.prototype, {
           this.navigate('restock');
         }
       } else {
-        const product = this.model.products.find(item => item.id === Number(document.getElementById('restockProduct').value));
+        const cup = this.model.cupVariants.find(item => item.key === document.getElementById('restockProduct').value);
         const qty = Number(document.getElementById('restockQuantity').value);
-        if (!product || qty <= 0) return this.view.toast('Invalid restock quantity');
-        product.stock += qty;
-        this.model.saveProducts();
-        this.view.toast('Product restocked');
+        if (!cup || qty <= 0) return this.view.toast('Invalid restock quantity');
+        cup.stock += qty;
+        this.model.saveCupVariants();
+        this.model.syncToDb('save_cup_variant', { key: cup.key, stock: cup.stock, minStock: cup.minStock || 10 });
+        this.view.toast(`${cup.name} restocked`);
         this.navigate('inventory');
       }
     };
@@ -30,12 +31,35 @@ Object.assign(AppController.prototype, {
     this.navigate('restock');
   },
 
+  manageCup(button) {
+    const cup = this.model.getCupVariant(button.dataset.id);
+    if (!cup) return;
+    this.view.modal('Manage ' + cup.name, `<div class="form-grid"><label>Cup Variant<input value="${cup.name}" disabled></label><label>Used For<input value="${cup.usedFor}" disabled></label><label>Available Cups<input id="cupStock" type="number" min="0" value="${cup.stock}"></label></div><button class="primary-action" type="button" data-action="save-cup" data-id="${cup.key}">Save Cup Stock</button>`);
+    this.bindDynamic();
+  },
+
+  saveCup(button) {
+    const cup = this.model.cupVariants.find(c => c.key === button.dataset.id);
+    if (!cup) return;
+    const stock = Number(document.getElementById('cupStock').value);
+    if (isNaN(stock) || stock < 0) return this.view.toast('Stock cannot be negative');
+    cup.stock = stock;
+    this.model.saveCupVariants();
+    this.model.syncToDb('save_cup_variant', { key: cup.key, stock, minStock: cup.minStock || 10 });
+    this.view.closeModal();
+    this.view.toast(`${cup.name} updated`);
+    this.navigate('inventory');
+  },
+
   manageProduct(button) {
     const product = button.dataset.id ? this.model.products.find(i => i.id === Number(button.dataset.id)) : null;
     const categoryOptions = ['Coffee', 'Frappe', 'Refresher']
       .map(cat => `<option ${product?.category === cat ? 'selected' : ''}>${cat}</option>`)
       .join('');
-    this.view.modal(product ? 'Manage ' + product.name : 'Add Product', `<div class="form-grid"><label>Product name<input id="productName" value="${product ? product.name : ''}"></label><label>Category<select id="productCategory">${categoryOptions}</select></label><label>Stock<input id="productStock" type="number" min="0" value="${product ? product.stock : 10}"></label><label>Price<input id="productPrice" type="number" min="1" value="${product ? product.price : 150}"></label></div><button class="primary-action" type="button" data-action="save" data-id="${product ? product.id : ''}">Save</button>`);
+    const cupOptions = (this.model.cupVariants || [])
+      .map(cup => `<option value="${cup.key}" ${product?.cupVariant === cup.key ? 'selected' : ''}>${cup.name} (${cup.stock} left)</option>`)
+      .join('');
+    this.view.modal(product ? 'Manage ' + product.name : 'Add Product', `<div class="form-grid"><label>Product name<input id="productName" value="${product ? product.name : ''}"></label><label>Category<select id="productCategory">${categoryOptions}</select></label><label>Cup Variant<select id="productCupVariant">${cupOptions}</select></label><label>Price<input id="productPrice" type="number" min="1" value="${product ? product.price : 150}"></label></div><button class="primary-action" type="button" data-action="save" data-id="${product ? product.id : ''}">Save</button>`);
     this.bindDynamic();
   },
 
@@ -43,17 +67,17 @@ Object.assign(AppController.prototype, {
     const name = document.getElementById('productName').value.trim();
     if (!name) return this.view.toast('Product name required');
     const category = document.getElementById('productCategory').value;
-    const stock = Number(document.getElementById('productStock').value);
+    const cupVariant = document.getElementById('productCupVariant').value || '16oz';
+    const stock = this.model.getCupStock(cupVariant);
     const price = Number(document.getElementById('productPrice').value);
-    if (isNaN(stock) || stock < 0) return this.view.toast('Stock cannot be negative');
     if (isNaN(price) || price <= 0) return this.view.toast('Price must be greater than 0');
     const id = button.dataset.id;
     let targetProduct;
     if (id) {
       targetProduct = this.model.products.find(i => i.id === Number(id));
-      Object.assign(targetProduct, { name, category, stock, price });
+      Object.assign(targetProduct, { name, category, cupVariant, stock, price });
     } else {
-      targetProduct = new Product(Date.now(), name, category, price, stock, 'assets/2.png');
+      targetProduct = new Product(Date.now(), name, category, price, stock, 'assets/2.png', cupVariant);
       this.model.products.push(targetProduct);
     }
     this.model.saveProducts();
@@ -61,6 +85,7 @@ Object.assign(AppController.prototype, {
       id: id ? Number(id) : 0,
       name,
       category,
+      cupVariant,
       price,
       stock,
       image: targetProduct.image || 'assets/2.png',

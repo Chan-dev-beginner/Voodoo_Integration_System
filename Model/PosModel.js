@@ -1,24 +1,40 @@
 Object.assign(AppModel.prototype, {
-  addProductToCart(id) {
+  addProductToCart(id, cupVariant, quantity = 1) {
     const product = this.products.find(item => item.id === Number(id));
-    if (!product || product.stock <= 0) return false;
-    const cartItem = this.cart.find(item => item.id === product.id);
+    if (!product) return false;
+    const allowed = this.getAllowedCupKeys(product.category);
+    const cupKey = allowed.includes(cupVariant) ? cupVariant : allowed[0];
+    const cupStock = this.getCupStock(cupKey);
+    const usedInCart = this.getCartCupUsage(cupKey);
+    const qty = Math.max(1, Number(quantity) || 1);
+    if (cupStock <= 0 || usedInCart + qty > cupStock) return false;
+    const cartKey = `${product.id}_${cupKey}`;
+    const cartItem = this.cart.find(item => (item.cartKey || `${item.id}_${item.cupVariant || allowed[0]}`) === cartKey);
     if (cartItem) {
-      if (cartItem.quantity >= product.stock) return false;
-      cartItem.quantity++;
+      cartItem.quantity += qty;
     } else {
-      this.cart.push({ ...product, quantity: 1 });
+      this.cart.push({
+        ...product,
+        cupVariant: cupKey,
+        cupLabel: this.getCupLabel(cupKey),
+        cartKey,
+        quantity: qty
+      });
     }
     return true;
   },
 
-  changeCartQuantity(id, change) {
-    const item = this.cart.find(cartItem => cartItem.id === Number(id));
+  changeCartQuantity(cartKey, change) {
+    const keyStr = String(cartKey);
+    const item = this.cart.find(cartItem => (cartItem.cartKey || String(cartItem.id)) === keyStr);
     if (!item) return false;
     const product = this.products.find(p => p.id === item.id);
-    if (change > 0 && product && item.quantity >= product.stock) return false;
+    const cupVariant = item.cupVariant || product?.cupVariant || '16oz';
+    if (change > 0 && this.getCartCupUsage(cupVariant) >= this.getCupStock(cupVariant)) return false;
     item.quantity += change;
-    if (item.quantity <= 0) this.cart = this.cart.filter(cartItem => cartItem.id !== Number(id));
+    if (item.quantity <= 0) {
+      this.cart = this.cart.filter(cartItem => (cartItem.cartKey || String(cartItem.id)) !== keyStr);
+    }
     return true;
   },
 
@@ -32,9 +48,14 @@ Object.assign(AppModel.prototype, {
   },
 
   syncProductsFromServer() {
+    const savedCups = this.load('voodooCupVariants', null);
+    if (Array.isArray(savedCups) && savedCups.length) {
+      this.cupVariants = savedCups;
+    }
     const saved = this.load('voodooProducts', null);
     if (saved) {
-      this.products = saved.map(p => new Product(p.id, p.name, p.category, p.price, p.stock, p.image));
+      this.products = saved.map(p => new Product(p.id, p.name, p.category, p.price, p.stock, p.image, p.cupVariant));
+      this.syncProductStocksFromCups();
     }
     return this.products;
   },
@@ -74,17 +95,25 @@ Object.assign(AppModel.prototype, {
     } catch (err) { /* silent — localStorage is primary */ }
   },
 
-  placePosOrder(paymentMethod) {
+  placePosOrder(paymentMethod, customerName, amountPaid) {
     if (!this.cart.length) throw new Error('Cart is empty');
+    const cleanName = String(customerName || '').trim();
+    if (!cleanName) throw new Error('Customer name is required');
     const totals = this.totals();
+    const paid = Number(amountPaid);
+    if (isNaN(paid) || paid < totals.total) {
+      throw new Error('Payment amount must cover the total');
+    }
     const order = {
       id: '#P' + String(Date.now()).slice(-6),
-      customerName: 'Walk-in Customer',
+      customerName: cleanName,
       tableNote: '',
       source: 'pos',
       orderType: this.orderType || 'dine-in',
       status: 'pending',
       paymentMethod,
+      amountPaid: paid,
+      changeAmount: Math.max(0, paid - totals.total),
       cashierId: this.account?.id || null,
       cashierUsername: this.account?.username || 'barista',
       account: this.account?.name || 'Barista',
@@ -92,6 +121,7 @@ Object.assign(AppModel.prototype, {
       items: this.cart.map(item => ({
         productId: item.id,
         name: item.name,
+        cupVariant: item.cupVariant || '16oz',
         quantity: item.quantity,
         price: item.price,
         total: item.price * item.quantity
@@ -124,23 +154,31 @@ Object.assign(AppModel.prototype, {
     }
 
     if (order.status === 'pending' && nextStatus === 'queue') {
+      const neededByCup = {};
       for (const item of order.items) {
         const product = this.products.find(p => p.id === Number(item.productId) || p.name === item.name);
-        if (product && product.stock < item.quantity) {
-          throw new Error(`Insufficient stock to approve ${product.name}.`);
+        const cupKey = item.cupVariant || product?.cupVariant || '16oz';
+        neededByCup[cupKey] = (neededByCup[cupKey] || 0) + Number(item.quantity || 0);
+      }
+      for (const [cupKey, needed] of Object.entries(neededByCup)) {
+        const cup = this.getCupVariant(cupKey);
+        if (cup && cup.stock < needed) {
+          throw new Error(`Insufficient ${cup.name} stock (${cup.stock} left, need ${needed}).`);
         }
       }
-      for (const item of order.items) {
-        const product = this.products.find(p => p.id === Number(item.productId) || p.name === item.name);
-        if (product) product.stock = Math.max(0, product.stock - item.quantity);
+      for (const [cupKey, needed] of Object.entries(neededByCup)) {
+        const cup = this.getCupVariant(cupKey);
+        if (cup) cup.stock = Math.max(0, Number(cup.stock || 0) - needed);
       }
-      this.saveProducts();
+      this.saveCupVariants();
     } else if ((order.status === 'queue' || order.status === 'preparing') && nextStatus === 'cancelled') {
       for (const item of order.items) {
         const product = this.products.find(p => p.id === Number(item.productId) || p.name === item.name);
-        if (product) product.stock += item.quantity;
+        const cupKey = item.cupVariant || product?.cupVariant || '16oz';
+        const cup = this.getCupVariant(cupKey);
+        if (cup) cup.stock = Number(cup.stock || 0) + Number(item.quantity || 0);
       }
-      this.saveProducts();
+      this.saveCupVariants();
     }
 
     order.status = nextStatus;
@@ -159,15 +197,29 @@ Object.assign(AppModel.prototype, {
   },
 
   fetchQrInfo() {
+    const host = window.location.hostname || 'localhost';
+    const isLocal = ['localhost', '127.0.0.1', '::1', ''].includes(host.toLowerCase());
+    if (!isLocal) {
+      const basePath = window.location.pathname.replace(/\/View\/.*$/i, '').replace(/\/[^/]*$/, '');
+      const liveUrl = `${window.location.origin}${basePath}/order.php`;
+      this.customerOrderingUrl = liveUrl;
+      return {
+        orderingUrl: liveUrl,
+        detectedIp: host,
+        networkAdapter: 'Live Domain',
+        availableNetworks: [{ adapter: 'Live Domain', ip: host, url: liveUrl }]
+      };
+    }
     if (window.VOODOO_QR_INFO && window.VOODOO_QR_INFO.orderingUrl) {
       this.customerOrderingUrl = window.VOODOO_QR_INFO.orderingUrl;
       return window.VOODOO_QR_INFO;
     }
-    const fallbackUrl = `${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, '')}/order.php`;
+    const basePath = window.location.pathname.replace(/\/View\/.*$/i, '').replace(/\/[^/]*$/, '');
+    const fallbackUrl = `${window.location.origin}${basePath}/order.php`;
     this.customerOrderingUrl = fallbackUrl;
     return {
       orderingUrl: fallbackUrl,
-      detectedIp: window.location.hostname || 'localhost',
+      detectedIp: host,
       networkAdapter: 'Local Network',
       availableNetworks: []
     };

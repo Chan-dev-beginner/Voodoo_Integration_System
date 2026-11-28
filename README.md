@@ -100,3 +100,53 @@ Voodoo_Integration_System/
 ### Scanning the QR Code from a Phone on the Same Wi-Fi
 - Ensure your Windows Wi-Fi network profile is set to **Private** (Settings → Network & internet → Wi-Fi → Network profile type → **Private**) so Windows Firewall allows incoming connections to Apache on port `80`.
 - Connect your phone to the same Wi-Fi/hotspot and scan the **Customer QR** from the Barista POS or Order Queue.
+
+---
+
+## System Outline & File Alignment
+
+```text
+1. Integrated System
+     1.1. Requirements Analysis
+          1.1.1. Interview Manager
+          1.1.2. Interview Employees
+          1.1.3. Scouting the Establishment
+2. System Design
+     2.1. User Interface and Experience — assets/styles.css, assets/base.css, assets/login.css, assets/layout.css, assets/dashboard.css, assets/pos.css, assets/queue.css, assets/ordering.css, assets/inventory.css, assets/modals.css, assets/forecast.css, assets/responsive.css
+     2.2. Database Design — database.sql, database_infinityfree.sql, Model/config.php, Controller/db_sync.php, Controller/orders_bridge.php
+3. System Development
+     3.1. Authentication
+          3.1.1. Login Module — View/index.php, Model/AuthModel.js, Controller/AccountsController.js, View/AdminView.js
+     3.2. POS
+          3.2.1. Dashboard — View/DashboardView.js
+          3.2.2. Order Module — View/PosView.js, Controller/PosController.js, Model/PosModel.js
+          3.2.3. Status Module — View/QueueView.js, Controller/QueueController.js, View/AppView.js
+          3.2.4. Transaction Logs — View/SalesView.js, Controller/SalesController.js, Model/SalesModel.js
+     3.3. Inventory Management
+          3.3.1. Dashboard — View/DashboardView.js
+          3.3.2. Stock Monitor — View/InventoryView.js, Controller/InventoryController.js, Model/InventoryModel.js
+          3.3.3. Alert Module — View/InventoryView.js
+          3.3.4. Restock Module — View/InventoryView.js, Model/InventoryModel.js, Controller/InventoryController.js
+          3.3.5. Request Stock Module — View/InventoryView.js, Model/InventoryModel.js, Controller/InventoryController.js
+          3.3.6. Backup Data Module — View/InventoryView.js, Controller/InventoryController.js
+     3.4. Ordering System
+          3.4.1. Dashboard — order.php, Controller/orders_bridge.php
+          3.4.2. Menu Board — order.php, Controller/db_sync.php
+          3.4.3. Ordering Module — order.php, Controller/orders_bridge.php
+          3.4.4. Cart Module — order.php, assets/ordering.css
+          3.4.5. Status Module — order.php, Controller/orders_bridge.php
+     3.5. Sales Forecasting API
+          3.5.1. Sales Revenue Forecast — Controller/api.php, Model/sales_forecast.py, View/AdminView.js
+          3.5.2. Sales Trend and Growth — Controller/api.php, Model/sales_forecast.py, View/AdminView.js
+          3.5.3. Product Demand Forecast — Controller/api.php, Model/sales_forecast.py, View/AdminView.js
+4. Testing
+     4.1. Alpha Testing
+     4.2. Beta Testing
+5. Deployment — index.php, Model/config.php, database_infinityfree.sql, data/barista_session.json, data/qr_orders.json, data/shift_sales_archive.json
+6. Maintenance
+     6.1. Bug Fixing
+     6.2. System Updates
+7. Documentation
+     7.1. System Guidelines — README.md
+     7.2. Manuscript
+```

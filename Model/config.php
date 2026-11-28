@@ -104,6 +104,50 @@ function ensureSalesSchema(PDO $pdo): void
     ");
     $seedUser->execute(['admin', 'admin', 'Admin', 'admin']);
     $seedUser->execute(['barista', 'barista', 'Barista', 'cashier']);
+
+    // Cup-variant inventory schema
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS cup_variants (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            variant_key VARCHAR(20) NOT NULL UNIQUE,
+            name VARCHAR(50) NOT NULL,
+            category_note VARCHAR(100) NOT NULL,
+            quantity INT NOT NULL DEFAULT 50,
+            minimum_quantity INT NOT NULL DEFAULT 10,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $seedCup = $pdo->prepare("
+        INSERT IGNORE INTO cup_variants (variant_key, name, category_note, quantity, minimum_quantity)
+        VALUES (?, ?, ?, ?, ?)
+    ");
+    $seedCup->execute(['16oz', '16oz Cup', 'Refreshers', 50, 10]);
+    $seedCup->execute(['22oz', '22oz Cup', 'Refreshers', 50, 10]);
+    $seedCup->execute(['hot', 'Hot Cup', 'Coffee & Frappe', 50, 10]);
+
+    $pdo->exec("UPDATE cup_variants SET category_note = 'Refreshers' WHERE variant_key IN ('16oz', '22oz')");
+    $pdo->exec("UPDATE cup_variants SET category_note = 'Coffee & Frappe' WHERE variant_key = 'hot'");
+
+    if (!$pdo->query("SHOW COLUMNS FROM products LIKE 'cup_variant'")->fetch()) {
+        $pdo->exec("ALTER TABLE products ADD COLUMN cup_variant VARCHAR(20) NOT NULL DEFAULT 'hot' AFTER price");
+    }
+    $pdo->exec("
+        UPDATE products p
+        JOIN categories c ON c.id = p.category_id
+        SET p.cup_variant = CASE
+            WHEN c.name = 'Refresher' THEN IF(p.cup_variant IN ('16oz', '22oz'), p.cup_variant, '22oz')
+            ELSE 'hot'
+        END
+    ");
+
+    if (!$pdo->query("SHOW COLUMNS FROM stock_requests LIKE 'cup_variant'")->fetch()) {
+        $pdo->exec("ALTER TABLE stock_requests ADD COLUMN cup_variant VARCHAR(20) NULL AFTER inventory_item_id");
+    }
+
+    if (!$pdo->query("SHOW COLUMNS FROM order_items LIKE 'cup_variant'")->fetch()) {
+        $pdo->exec("ALTER TABLE order_items ADD COLUMN cup_variant VARCHAR(20) NULL AFTER product_id");
+    }
 }
 
 /**
@@ -111,7 +155,10 @@ function ensureSalesSchema(PDO $pdo): void
  */
 function getCustomerOrderingDetails(): array
 {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
+        || (int) ($_SERVER['SERVER_PORT'] ?? 80) === 443;
+    $scheme = $isHttps ? 'https' : 'http';
     $hostHeader = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
     $hostOnly = preg_replace('/:\d+$/', '', $hostHeader);
     $port = '';

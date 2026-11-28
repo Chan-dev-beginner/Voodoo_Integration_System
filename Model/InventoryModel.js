@@ -3,13 +3,20 @@ Object.assign(AppModel.prototype, {
     this.save('voodooProducts', this.products);
   },
 
-  requestRestock(productId, quantity) {
-    const product = this.products.find(item => item.id === Number(productId));
-    if (!product || Number(quantity) <= 0) return false;
+  saveCupVariants() {
+    this.save('voodooCupVariants', this.cupVariants);
+    this.syncProductStocksFromCups();
+    this.saveProducts();
+  },
+
+  requestRestock(cupVariantKey, quantity) {
+    const cup = this.cupVariants.find(c => c.key === cupVariantKey);
+    if (!cup || Number(quantity) <= 0) return false;
     const req = {
       id: 'RR-' + String(Date.now()).slice(-6),
-      productId: product.id,
-      productName: product.name,
+      cupVariant: cup.key,
+      productId: 0,
+      productName: cup.name,
       quantity: Number(quantity),
       requestedBy: this.account.name,
       status: 'Pending',
@@ -19,7 +26,7 @@ Object.assign(AppModel.prototype, {
     this.restockRequests.push(req);
     this.save('voodooRestockRequests', this.restockRequests);
     this.syncToDb('create_restock_request', {
-      productId: product.id,
+      cupVariant: cup.key,
       quantity: Number(quantity),
       userId: this.account?.id || null
     }).then(res => {
@@ -35,12 +42,20 @@ Object.assign(AppModel.prototype, {
   approveRestock(requestId) {
     const request = this.restockRequests.find(item => item.id === requestId);
     if (!request || request.status !== 'Pending') return false;
-    const product = this.products.find(item => item.id === request.productId);
-    if (product) product.stock += request.quantity;
+    const cup = this.cupVariants.find(c => c.key === request.cupVariant || c.name === request.productName);
+    if (cup) {
+      cup.stock = Number(cup.stock || 0) + Number(request.quantity || 0);
+      this.saveCupVariants();
+    } else {
+      const product = this.products.find(item => item.id === request.productId);
+      if (product) {
+        product.stock += request.quantity;
+        this.saveProducts();
+      }
+    }
     request.status = 'Approved';
     request.approvedAt = new Date().toISOString();
     this.save('voodooRestockRequests', this.restockRequests);
-    this.saveProducts();
     this.syncToDb('resolve_restock_request', {
       dbId: request.dbId || Number(String(request.id).replace('RR-', '')),
       decision: 'approve',

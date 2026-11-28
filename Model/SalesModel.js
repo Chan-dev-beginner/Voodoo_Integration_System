@@ -38,6 +38,26 @@ Object.assign(AppModel.prototype, {
     return order;
   },
 
+  getShiftCupSummary(customOrders = null) {
+    const orders = customOrders || this.getCurrentShiftOrders();
+    const usedByCup = { '16oz': 0, '22oz': 0, 'hot': 0 };
+    orders.forEach(order => {
+      (order.items || []).forEach(item => {
+        const prod = this.products.find(p => p.id === Number(item.productId) || p.name === item.name);
+        const key = ['16oz', '22oz', 'hot'].includes(item.cupVariant)
+          ? item.cupVariant
+          : (prod?.category === 'Refresher' ? '22oz' : 'hot');
+        usedByCup[key] = (usedByCup[key] || 0) + Number(item.quantity || 0);
+      });
+    });
+    return (this.cupVariants || []).map(c => ({
+      key: c.key,
+      name: c.name,
+      used: usedByCup[c.key] || 0,
+      remaining: Number(c.stock || 0)
+    }));
+  },
+
   async saveShiftSalesToDatabase(customOrders = null, customStart = null) {
     if (!this.account || this.account.role !== 'barista') {
       return { ok: false, skipped: true };
@@ -64,8 +84,25 @@ Object.assign(AppModel.prototype, {
       else otherTotal += amount;
     });
 
+    const cupSummary = this.getShiftCupSummary(orders);
     this.savedShiftSales = this.load('voodooSavedShiftSales', []);
     const existing = this.savedShiftSales.find(s => s.shift_key === shiftKey);
+    const orderSnapshots = orders.map(o => ({
+      id: o.id,
+      customerName: o.customerName || 'Walk-in',
+      paymentMethod: o.paymentMethod || 'Cash',
+      amountPaid: o.amountPaid,
+      changeAmount: o.changeAmount,
+      total: Number(o.total || 0),
+      time: o.time,
+      items: (o.items || []).map(i => ({
+        name: i.name,
+        cupVariant: i.cupVariant || '',
+        quantity: Number(i.quantity || 0),
+        price: Number(i.price || 0),
+        total: Number(i.total || 0)
+      }))
+    }));
     const record = {
       id: existing ? existing.id : Date.now(),
       shift_key: shiftKey,
@@ -78,7 +115,9 @@ Object.assign(AppModel.prototype, {
       cash_total: cashTotal,
       gcash_total: gcashTotal,
       other_total: otherTotal,
-      total_sales: totalSales
+      total_sales: totalSales,
+      cup_summary: cupSummary,
+      orders: orderSnapshots
     };
 
     if (existing) Object.assign(existing, record);

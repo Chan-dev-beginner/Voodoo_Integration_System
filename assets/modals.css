@@ -58,8 +58,9 @@
 }
 
 .shift-summary {
-  width: min(560px, 100%);
+  width: min(680px, 100%);
   min-width: 0;
+  margin: 0 auto;
 }
 
 .shift-summary-header {

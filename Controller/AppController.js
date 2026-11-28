@@ -4,6 +4,8 @@ class AppController {
     this.view = view;
     this.handlers = {
       'add': b => this.addItem(b),
+      'pick-cup': b => this.openCupModal(b),
+      'confirm-add-cup': b => this.confirmAddCup(b),
       'plus': b => this.changeQty(b, 1),
       'minus': b => this.changeQty(b, -1),
       'clear': () => this.clearCart(),
@@ -16,11 +18,14 @@ class AppController {
       'order-type': b => this.setOrderType(b),
       'manage': b => this.manageProduct(b),
       'save': b => this.saveProduct(b),
+      'manage-cup': b => this.manageCup(b),
+      'save-cup': b => this.saveCup(b),
       'view-order': b => this.viewOrder(b),
       'backup': () => this.createBackup(),
       'import': () => this.importInventory(),
       'export': () => this.exportInventory(),
       'download-summary': () => this.downloadSummary(),
+      'view-shift': b => this.viewShiftRecord(b),
       'download-shift-pdf': b => this.downloadShiftPdf(b),
       'restock': () => this.navigate('restock'),
       'show-qr': () => this.showQrModal(),
@@ -32,7 +37,8 @@ class AppController {
       'change-password': b => this.openChangePassword(b),
       'submit-password': () => this.submitChangePassword(),
       'run-forecast': () => this.loadSalesForecast(),
-      'time-out': () => this.timeOutShift()
+      'time-out': () => this.confirmTimeOut(),
+      'confirm-time-out': () => this.timeOutShift()
     };
     this.pollTimer = null;
     this.bindGlobal();
@@ -109,8 +115,8 @@ class AppController {
     document.querySelector('.avatar').textContent = (this.model.account.name || 'U').charAt(0).toUpperCase();
 
     this.view.nav(role === 'admin'
-      ? [['dashboard','','Dashboard'],['forecast','','Sales Forecast'],['inventory','','Stock Monitor'],['alerts','','Alerts'],['restock','','Restock Requests'],['order-log','','Order Log'],['accounts','','Accounts'],['backup','','Backup Data']]
-      : [['pos','','POS'],['order-queue','','Order Queue'],['dashboard','','Dashboard'],['restock','','Request Restock'],['order-log','','Order Log']]);
+      ? [['dashboard','','Dashboard'],['forecast','','Sales Forecast'],['inventory','','Stock Monitor'],['alerts','','Alerts'],['restock','','Restock Requests'],['order-log','','Shift Log'],['accounts','','Accounts'],['backup','','Backup Data']]
+      : [['pos','','POS'],['order-queue','','Order Queue'],['dashboard','','Dashboard'],['inventory','','Inventory'],['restock','','Request Restock'],['order-log','','Order Log']]);
 
     this.navigate(role === 'barista' ? 'pos' : 'dashboard');
     this.view.clock();
@@ -123,8 +129,6 @@ class AppController {
       });
       this.model.notifyBaristaBridge('barista_login');
     }
-    const timeOutBtn = document.getElementById('timeOutButton');
-    if (timeOutBtn) timeOutBtn.classList.toggle('hidden', role !== 'barista');
     this.refreshLiveData();
     this.startLivePolling();
     this.model.bootstrapFromDatabase().then(ok => {
@@ -159,7 +163,9 @@ class AppController {
       'order-log': 'Shift Order Log',
       accounts: 'Staff Accounts'
     };
-    document.getElementById('pageTitle').textContent = titles[module];
+    document.getElementById('pageTitle').textContent = (module === 'order-log' && this.model.account?.role === 'admin')
+      ? 'Shift Log'
+      : titles[module];
 
     const views = {
       pos: () => this.view.pos(),

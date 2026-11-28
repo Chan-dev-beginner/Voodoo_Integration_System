@@ -63,10 +63,17 @@ Object.assign(AppController.prototype, {
     if (!container || !input) return;
     const url = input.value.trim();
     container.innerHTML = '';
+    container.style.padding = '12px';
+    container.style.background = '#ffffff';
+    container.style.borderRadius = '10px';
     const link = document.querySelector('.qr-open-link');
     if (link) link.href = url;
     if (typeof QRCode !== 'undefined') {
-      new QRCode(container, { text: url, width: 210, height: 210, colorDark: '#101725', colorLight: '#ffffff' });
+      const opts = { text: url, width: 220, height: 220, colorDark: '#101725', colorLight: '#ffffff' };
+      if (QRCode.CorrectLevel && QRCode.CorrectLevel.M !== undefined) {
+        opts.correctLevel = QRCode.CorrectLevel.M;
+      }
+      new QRCode(container, opts);
     } else {
       container.innerHTML = '<p class="login-hint">QR library offline — share or open the URL below.</p>';
     }

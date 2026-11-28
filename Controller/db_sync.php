@@ -24,14 +24,34 @@ function toMysqlDateTime(?string $iso): string
     return $ts ? date('Y-m-d H:i:s', $ts) : date('Y-m-d H:i:s');
 }
 
+function fetchCupVariantsPayload(PDO $pdo): array
+{
+    $rows = $pdo->query("
+        SELECT id, variant_key, name, category_note, quantity, minimum_quantity
+        FROM cup_variants
+        ORDER BY FIELD(variant_key, '16oz', '22oz', 'hot'), id ASC
+    ")->fetchAll();
+
+    return array_map(static fn($r) => [
+        'id' => (int) $r['id'],
+        'key' => $r['variant_key'],
+        'name' => $r['name'],
+        'usedFor' => $r['category_note'],
+        'stock' => (int) $r['quantity'],
+        'minStock' => (int) $r['minimum_quantity'],
+    ], $rows);
+}
+
 function fetchProductsPayload(PDO $pdo): array
 {
     $rows = $pdo->query("
         SELECT p.id, p.name, c.name AS category, p.price,
-               COALESCE(i.quantity, 0) AS stock,
+               COALESCE(p.cup_variant, '16oz') AS cup_variant,
+               COALESCE(cv.quantity, i.quantity, 0) AS stock,
                COALESCE(p.image, 'assets/2.png') AS image
         FROM products p
         JOIN categories c ON c.id = p.category_id
+        LEFT JOIN cup_variants cv ON cv.variant_key = p.cup_variant
         LEFT JOIN inventory_items i ON i.product_id = p.id
         WHERE p.is_available = 1
         ORDER BY p.id ASC
@@ -42,6 +62,7 @@ function fetchProductsPayload(PDO $pdo): array
         'name' => $r['name'],
         'category' => $r['category'],
         'price' => (float) $r['price'],
+        'cupVariant' => $r['cup_variant'] ?: '16oz',
         'stock' => (int) $r['stock'],
         'image' => $r['image'] ?: 'assets/2.png',
     ], $rows);
@@ -59,9 +80,13 @@ if ($method === 'POST') {
 try {
     $pdo = getDbConnection();
 
-    // GET: Public product catalog for customer ordering (order.php)
+    // GET: Public product catalog & cup variants for customer ordering (order.php)
     if ($method === 'GET' && $action === 'get_products') {
-        syncJson(200, ['ok' => true, 'products' => fetchProductsPayload($pdo)]);
+        syncJson(200, [
+            'ok' => true,
+            'products' => fetchProductsPayload($pdo),
+            'cupVariants' => fetchCupVariantsPayload($pdo),
+        ]);
     }
 
     // GET: Single-call bootstrap of all core tables for POS/Admin/Barista
@@ -73,6 +98,7 @@ try {
         ")->fetchAll();
 
         $products = fetchProductsPayload($pdo);
+        $cupVariants = fetchCupVariantsPayload($pdo);
 
         $orderRows = $pdo->query("
             SELECT o.id AS db_id, o.order_number, o.customer_name, o.table_note,
@@ -86,7 +112,8 @@ try {
         ")->fetchAll();
 
         $itemStmt = $pdo->prepare("
-            SELECT oi.product_id, p.name, oi.quantity, oi.unit_price, oi.line_total
+            SELECT oi.product_id, p.name, COALESCE(oi.cup_variant, p.cup_variant, '16oz') AS cup_variant,
+                   oi.quantity, oi.unit_price, oi.line_total
             FROM order_items oi
             JOIN products p ON p.id = oi.product_id
             WHERE oi.order_id = ?
@@ -98,6 +125,7 @@ try {
             $items = array_map(static fn($i) => [
                 'productId' => (int) $i['product_id'],
                 'name' => $i['name'],
+                'cupVariant' => $i['cup_variant'] ?: '16oz',
                 'quantity' => (int) $i['quantity'],
                 'price' => (float) $i['unit_price'],
                 'total' => (float) $i['line_total'],
@@ -126,12 +154,13 @@ try {
         }
 
         $reqRows = $pdo->query("
-            SELECT sr.id, ii.product_id, p.name AS product_name, sr.quantity,
+            SELECT sr.id, sr.cup_variant, cv.name AS cup_name, ii.product_id, p.name AS product_name, sr.quantity,
                    COALESCE(u.full_name, 'Barista') AS requested_by,
                    sr.status, sr.created_at
             FROM stock_requests sr
-            JOIN inventory_items ii ON ii.id = sr.inventory_item_id
-            JOIN products p ON p.id = ii.product_id
+            LEFT JOIN cup_variants cv ON cv.variant_key = sr.cup_variant
+            LEFT JOIN inventory_items ii ON ii.id = sr.inventory_item_id
+            LEFT JOIN products p ON p.id = ii.product_id
             LEFT JOIN users u ON u.id = sr.requested_by
             ORDER BY sr.id DESC
             LIMIT 100
@@ -140,8 +169,9 @@ try {
         $restockRequests = array_map(static fn($r) => [
             'id' => 'RR-' . $r['id'],
             'dbId' => (int) $r['id'],
-            'productId' => (int) $r['product_id'],
-            'productName' => $r['product_name'],
+            'cupVariant' => $r['cup_variant'] ?: '16oz',
+            'productId' => (int) ($r['product_id'] ?? 0),
+            'productName' => $r['cup_name'] ?: ($r['product_name'] ?: '16oz Cup'),
             'quantity' => (float) $r['quantity'],
             'requestedBy' => $r['requested_by'],
             'status' => ucfirst((string) $r['status']),
@@ -176,6 +206,7 @@ try {
             'ok' => true,
             'users' => $users,
             'products' => $products,
+            'cupVariants' => $cupVariants,
             'orders' => $orders,
             'restockRequests' => $restockRequests,
             'shiftSales' => $shiftSales,
@@ -228,6 +259,9 @@ try {
         $name = trim((string) ($body['name'] ?? ''));
         $category = trim((string) ($body['category'] ?? 'Coffee')) ?: 'Coffee';
         $price = round((float) ($body['price'] ?? 0), 2);
+        $cupVariant = in_array($body['cupVariant'] ?? '', ['16oz', '22oz', 'hot'], true)
+            ? (string) $body['cupVariant']
+            : ($category === 'Refresher' ? '22oz' : '16oz');
         $stock = max(0, (int) ($body['stock'] ?? 0));
         $image = trim((string) ($body['image'] ?? 'assets/2.png')) ?: 'assets/2.png';
         $userId = !empty($body['userId']) ? (int) $body['userId'] : null;
@@ -250,11 +284,11 @@ try {
         }
 
         if ($exists) {
-            $pdo->prepare("UPDATE products SET category_id = ?, name = ?, price = ?, image = ?, is_available = 1 WHERE id = ?")
-                ->execute([$categoryId, $name, $price, $image, $id]);
+            $pdo->prepare("UPDATE products SET category_id = ?, name = ?, price = ?, cup_variant = ?, image = ?, is_available = 1 WHERE id = ?")
+                ->execute([$categoryId, $name, $price, $cupVariant, $image, $id]);
         } else {
-            $pdo->prepare("INSERT INTO products (category_id, name, price, image, is_available) VALUES (?, ?, ?, ?, 1)")
-                ->execute([$categoryId, $name, $price, $image]);
+            $pdo->prepare("INSERT INTO products (category_id, name, price, cup_variant, image, is_available) VALUES (?, ?, ?, ?, ?, 1)")
+                ->execute([$categoryId, $name, $price, $cupVariant, $image]);
             $id = (int) $pdo->lastInsertId();
         }
 
@@ -279,6 +313,19 @@ try {
         }
 
         syncJson(200, ['ok' => true, 'id' => $id]);
+    }
+
+    // POST: Save / update cup variant stock in `cup_variants`
+    if ($method === 'POST' && $action === 'save_cup_variant') {
+        $key = trim((string) ($body['key'] ?? ''));
+        $stock = max(0, (int) ($body['stock'] ?? 0));
+        $minStock = max(0, (int) ($body['minStock'] ?? 10));
+        if (!in_array($key, ['16oz', '22oz', 'hot'], true)) {
+            syncJson(400, ['ok' => false, 'error' => 'Invalid cup variant key.']);
+        }
+        $pdo->prepare("UPDATE cup_variants SET quantity = ?, minimum_quantity = ? WHERE variant_key = ?")
+            ->execute([$stock, $minStock, $key]);
+        syncJson(200, ['ok' => true]);
     }
 
     // POST: Save order into `orders`, `order_items`, `transactions`
@@ -322,20 +369,24 @@ try {
             $orderId = (int) $pdo->lastInsertId();
 
             $itemIns = $pdo->prepare("
-                INSERT INTO order_items (order_id, product_id, quantity, unit_price, line_total)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO order_items (order_id, product_id, cup_variant, quantity, unit_price, line_total)
+                VALUES (?, ?, ?, ?, ?, ?)
             ");
-            $pChk = $pdo->prepare("SELECT id FROM products WHERE id = ?");
+            $pChk = $pdo->prepare("SELECT id, cup_variant FROM products WHERE id = ?");
             foreach (($body['items'] ?? []) as $item) {
                 $pid = (int) ($item['productId'] ?? 0);
                 $pChk->execute([$pid]);
-                if (!$pChk->fetchColumn()) {
+                $pRow = $pChk->fetch();
+                if (!$pRow) {
                     continue;
                 }
+                $cupVar = in_array($item['cupVariant'] ?? '', ['16oz', '22oz', 'hot'], true)
+                    ? (string) $item['cupVariant']
+                    : ($pRow['cup_variant'] ?: '16oz');
                 $qty = max(1, (int) ($item['quantity'] ?? 1));
                 $price = round((float) ($item['price'] ?? 0), 2);
                 $lineTotal = round((float) ($item['total'] ?? ($price * $qty)), 2);
-                $itemIns->execute([$orderId, $pid, $qty, $price, $lineTotal]);
+                $itemIns->execute([$orderId, $pid, $cupVar, $qty, $price, $lineTotal]);
             }
 
             $pm = strtolower(trim((string) ($body['paymentMethod'] ?? 'cash')));
@@ -371,68 +422,97 @@ try {
         $prevStatus = (string) $order['status'];
         $pdo->prepare("UPDATE orders SET status = ? WHERE id = ?")->execute([$nextStatus, (int) $order['id']]);
 
-        // Deduct inventory once when moving from pending -> queue
+        // Deduct cup-variant inventory once when moving from pending -> queue, or restore on cancel
         if ($prevStatus === 'pending' && $nextStatus === 'queue') {
-            $items = $pdo->prepare("SELECT product_id, quantity FROM order_items WHERE order_id = ?");
+            $items = $pdo->prepare("
+                SELECT oi.product_id, oi.quantity, COALESCE(oi.cup_variant, p.cup_variant, '16oz') AS cup_variant
+                FROM order_items oi
+                JOIN products p ON p.id = oi.product_id
+                WHERE oi.order_id = ?
+            ");
             $items->execute([(int) $order['id']]);
             $invQ = $pdo->prepare("SELECT id FROM inventory_items WHERE product_id = ?");
             $mvIns = $pdo->prepare("INSERT INTO stock_movements (inventory_item_id, user_id, movement_type, quantity, notes) VALUES (?, ?, 'usage', ?, ?)");
+            $cupDed = $pdo->prepare("UPDATE cup_variants SET quantity = GREATEST(0, quantity - ?) WHERE variant_key = ?");
             foreach ($items->fetchAll() as $it) {
                 $pid = (int) $it['product_id'];
                 $qty = (int) $it['quantity'];
-                $pdo->prepare("UPDATE inventory_items SET quantity = GREATEST(0, quantity - ?) WHERE product_id = ?")
-                    ->execute([$qty, $pid]);
+                $cupVar = (string) $it['cup_variant'];
+                $cupDed->execute([$qty, $cupVar]);
                 $invQ->execute([$pid]);
                 $invId = (int) $invQ->fetchColumn();
                 if ($invId > 0) {
-                    $mvIns->execute([$invId, $userId, -$qty, 'Order ' . $orderNumber]);
+                    $mvIns->execute([$invId, $userId, -$qty, 'Order ' . $orderNumber . ' (' . $cupVar . ')']);
                 }
+            }
+        } elseif (($prevStatus === 'queue' || $prevStatus === 'preparing') && $nextStatus === 'cancelled') {
+            $items = $pdo->prepare("
+                SELECT oi.product_id, oi.quantity, COALESCE(oi.cup_variant, p.cup_variant, '16oz') AS cup_variant
+                FROM order_items oi
+                JOIN products p ON p.id = oi.product_id
+                WHERE oi.order_id = ?
+            ");
+            $items->execute([(int) $order['id']]);
+            $cupAdd = $pdo->prepare("UPDATE cup_variants SET quantity = quantity + ? WHERE variant_key = ?");
+            foreach ($items->fetchAll() as $it) {
+                $cupAdd->execute([(int) $it['quantity'], (string) $it['cup_variant']]);
             }
         }
 
         syncJson(200, ['ok' => true]);
     }
 
-    // POST: Create restock request in `stock_requests` and `stock_movements`
+    // POST: Create restock request in `stock_requests` and `stock_movements` (cup-variant or product)
     if ($method === 'POST' && $action === 'create_restock_request') {
+        $cupVariant = trim((string) ($body['cupVariant'] ?? ''));
         $productId = (int) ($body['productId'] ?? 0);
         $quantity = (float) ($body['quantity'] ?? 0);
         $userId = !empty($body['userId']) ? (int) $body['userId'] : null;
 
-        if ($productId <= 0 || $quantity <= 0) {
-            syncJson(400, ['ok' => false, 'error' => 'Valid product and quantity required.']);
+        if ($quantity <= 0 || (!in_array($cupVariant, ['16oz', '22oz', 'hot'], true) && $productId <= 0)) {
+            syncJson(400, ['ok' => false, 'error' => 'Valid cup variant and quantity required.']);
         }
 
-        $invStmt = $pdo->prepare("SELECT id FROM inventory_items WHERE product_id = ?");
-        $invStmt->execute([$productId]);
-        $invId = (int) $invStmt->fetchColumn();
+        if ($productId > 0) {
+            $invStmt = $pdo->prepare("SELECT id FROM inventory_items WHERE product_id = ?");
+            $invStmt->execute([$productId]);
+            $invId = (int) $invStmt->fetchColumn();
+        } else {
+            $invId = (int) $pdo->query("SELECT id FROM inventory_items ORDER BY id ASC LIMIT 1")->fetchColumn();
+        }
+
         if (!$invId) {
-            $pdo->prepare("INSERT INTO inventory_items (product_id, quantity, minimum_quantity) VALUES (?, 0, 5)")
-                ->execute([$productId]);
-            $invId = (int) $pdo->lastInsertId();
+            $firstProdId = (int) $pdo->query("SELECT id FROM products ORDER BY id ASC LIMIT 1")->fetchColumn();
+            if ($firstProdId > 0) {
+                $pdo->prepare("INSERT INTO inventory_items (product_id, quantity, minimum_quantity) VALUES (?, 0, 5)")
+                    ->execute([$firstProdId]);
+                $invId = (int) $pdo->lastInsertId();
+            }
         }
 
         if (!$userId) {
             $userId = (int) $pdo->query("SELECT id FROM users ORDER BY id ASC LIMIT 1")->fetchColumn();
         }
 
-        $pdo->prepare("INSERT INTO stock_requests (inventory_item_id, requested_by, quantity, status) VALUES (?, ?, ?, 'pending')")
-            ->execute([$invId, $userId, $quantity]);
+        $pdo->prepare("INSERT INTO stock_requests (inventory_item_id, cup_variant, requested_by, quantity, status) VALUES (?, ?, ?, ?, 'pending')")
+            ->execute([$invId, $cupVariant !== '' ? $cupVariant : null, $userId, $quantity]);
         $reqId = (int) $pdo->lastInsertId();
 
-        $pdo->prepare("INSERT INTO stock_movements (inventory_item_id, user_id, movement_type, quantity, notes) VALUES (?, ?, 'request', ?, ?)")
-            ->execute([$invId, $userId, $quantity, 'Restock request RR-' . $reqId]);
+        if ($invId > 0) {
+            $pdo->prepare("INSERT INTO stock_movements (inventory_item_id, user_id, movement_type, quantity, notes) VALUES (?, ?, 'request', ?, ?)")
+                ->execute([$invId, $userId, $quantity, 'Restock request RR-' . $reqId . ($cupVariant ? " ($cupVariant)" : '')]);
+        }
 
         syncJson(200, ['ok' => true, 'dbId' => $reqId, 'id' => 'RR-' . $reqId]);
     }
 
-    // POST: Approve/reject `stock_requests`, update `inventory_items` + `stock_movements`
+    // POST: Approve/reject `stock_requests`, update `cup_variants` / `inventory_items` + `stock_movements`
     if ($method === 'POST' && $action === 'resolve_restock_request') {
         $dbId = (int) ($body['dbId'] ?? 0);
         $decision = ($body['decision'] ?? '') === 'approve' ? 'approved' : 'rejected';
         $userId = !empty($body['userId']) ? (int) $body['userId'] : null;
 
-        $srStmt = $pdo->prepare("SELECT id, inventory_item_id, quantity, status FROM stock_requests WHERE id = ?");
+        $srStmt = $pdo->prepare("SELECT id, inventory_item_id, cup_variant, quantity, status FROM stock_requests WHERE id = ?");
         $srStmt->execute([$dbId]);
         $sr = $srStmt->fetch();
         if (!$sr || $sr['status'] !== 'pending') {
@@ -444,9 +524,16 @@ try {
         if ($decision === 'approved') {
             $qty = (float) $sr['quantity'];
             $invId = (int) $sr['inventory_item_id'];
-            $pdo->prepare("UPDATE inventory_items SET quantity = quantity + ? WHERE id = ?")->execute([$qty, $invId]);
-            $pdo->prepare("INSERT INTO stock_movements (inventory_item_id, user_id, movement_type, quantity, notes) VALUES (?, ?, 'restock', ?, ?)")
-                ->execute([$invId, $userId, $qty, 'Approved restock RR-' . $dbId]);
+            $cupVariant = (string) ($sr['cup_variant'] ?? '');
+            if (in_array($cupVariant, ['16oz', '22oz', 'hot'], true)) {
+                $pdo->prepare("UPDATE cup_variants SET quantity = quantity + ? WHERE variant_key = ?")->execute([(int) $qty, $cupVariant]);
+            } elseif ($invId > 0) {
+                $pdo->prepare("UPDATE inventory_items SET quantity = quantity + ? WHERE id = ?")->execute([$qty, $invId]);
+            }
+            if ($invId > 0) {
+                $pdo->prepare("INSERT INTO stock_movements (inventory_item_id, user_id, movement_type, quantity, notes) VALUES (?, ?, 'restock', ?, ?)")
+                    ->execute([$invId, $userId, $qty, 'Approved restock RR-' . $dbId . ($cupVariant ? " ($cupVariant)" : '')]);
+            }
         }
 
         syncJson(200, ['ok' => true]);

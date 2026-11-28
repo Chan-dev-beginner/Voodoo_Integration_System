@@ -58,8 +58,24 @@ Object.assign(AppController.prototype, {
         const query = event.target.value.toLowerCase();
         grid.innerHTML = this.model.products
           .filter(product => product.name.toLowerCase().includes(query))
-          .map(product => `<article class="product-card"><div class="product-image"><img src="${product.image}" alt="${product.name}"></div><div class="product-info"><div><h3>${product.name}</h3><p>${this.view.money(product.price)}</p></div><button class="add-button" type="button" data-action="add" data-id="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋</button></div></article>`)
+          .map(product => this.view.productCardHtml(product))
           .join('') || '<p>No products found.</p>';
+      };
+    }
+
+    const posCustomerInput = document.getElementById('posCustomerName');
+    if (posCustomerInput) {
+      posCustomerInput.oninput = event => {
+        this.model.posCustomerName = event.target.value;
+      };
+    }
+
+    const grid = document.getElementById('posGrid') || document.getElementById('orderingGrid');
+    if (grid) {
+      grid.onclick = event => {
+        if (event.target.closest('button')) return;
+        const card = event.target.closest('[data-product-card]');
+        if (card) this.openCupModal(card);
       };
     }
 
@@ -68,23 +84,71 @@ Object.assign(AppController.prototype, {
       inventorySearch.oninput = event => {
         const rows = document.getElementById('inventoryRows');
         const query = event.target.value.toLowerCase();
+        const isAdmin = this.model.account?.role === 'admin';
         rows.innerHTML = this.model.products
-          .filter(product => (product.name + ' ' + product.category).toLowerCase().includes(query))
-          .map(product => `<tr><td><strong>${product.name}</strong></td><td>${product.category}</td><td>${product.stock} cups</td><td>${this.view.money(product.price)}</td><td>${product.stock === 0 ? 'Out of stock' : product.stock <= 5 ? 'Low stock' : 'In stock'}</td><td><button class="row-action" type="button" data-action="manage" data-id="${product.id}">Manage</button></td></tr>`)
+          .filter(product => (product.name + ' ' + product.category + ' ' + this.model.getCupLabel(product.cupVariant)).toLowerCase().includes(query))
+          .map(product => {
+            const cupLabel = this.model.getCupLabel(product.cupVariant);
+            const cupStock = this.model.getCupStock(product.cupVariant);
+            const status = cupStock <= 0 ? 'Out of stock' : cupStock <= 10 ? 'Low stock' : 'In stock';
+            const statusClass = cupStock <= 0 ? 'stock-out' : cupStock <= 10 ? 'stock-low' : '';
+            const actionCell = isAdmin ? `<td><button class="row-action" type="button" data-action="manage" data-id="${product.id}">Manage</button></td>` : '';
+            return `<tr><td><strong>${product.name}</strong></td><td>${product.category}</td><td>${cupLabel} (${cupStock} cups)</td><td>${this.view.money(product.price)}</td><td><span class="${statusClass}">${status}</span></td>${actionCell}</tr>`;
+          })
           .join('');
       };
     }
   },
 
-  addItem(button) {
-    if (!this.model.addProductToCart(button.dataset.id)) return this.view.toast('Not enough stock');
+  openCupModal(button) {
+    const product = this.model.products.find(p => p.id === Number(button.dataset.id));
+    if (!product) return;
+    const allowedCups = this.model.getAllowedCupVariants(product.category);
+    const firstAvailable = allowedCups.find(c => Number(c.stock) > 0) || allowedCups[0];
+    const cupCards = allowedCups.map(cup => {
+      const disabled = Number(cup.stock) <= 0;
+      const checked = firstAvailable && cup.key === firstAvailable.key && !disabled ? 'checked' : '';
+      return `<label class="cup-option-card ${disabled ? 'disabled' : ''}">
+        <input type="radio" name="cupModalVariant" value="${cup.key}" ${checked} ${disabled ? 'disabled' : ''}>
+        <div>
+          <strong>${cup.name}</strong>
+          ${disabled ? '<small>Out of stock</small>' : ''}
+        </div>
+      </label>`;
+    }).join('');
+    this.view.modal(`Select Cup — ${product.name}`, `
+      <div class="cup-modal-product">
+        <img src="${product.image}" alt="${product.name}">
+        <div>
+          <strong>${product.name}</strong>
+          <p>${product.category} · ${this.view.money(product.price)}</p>
+        </div>
+      </div>
+      <div class="cup-option-grid">${cupCards}</div>
+      <button class="primary-action" type="button" data-action="confirm-add-cup" data-id="${product.id}" style="width:100%;margin-top:14px;">Add to Order</button>
+    `);
+    this.bindDynamic();
+  },
+
+  confirmAddCup(button) {
+    const productId = Number(button.dataset.id);
+    const selected = document.querySelector('input[name="cupModalVariant"]:checked');
+    if (!selected) return this.view.toast('Selected cup variant is out of stock');
+    if (!this.model.addProductToCart(productId, selected.value, 1)) {
+      return this.view.toast(`Not enough ${this.model.getCupLabel(selected.value)} stock`);
+    }
     this.view.renderCart();
-    this.view.toast('Item added');
+    this.view.closeModal();
+    this.view.toast(`Added (${this.model.getCupLabel(selected.value)})`);
+  },
+
+  addItem(button) {
+    this.openCupModal(button);
   },
 
   changeQty(button, change) {
     if (!this.model.changeCartQuantity(button.dataset.id, change) && change > 0) {
-      return this.view.toast('Not enough stock');
+      return this.view.toast('Not enough cup stock');
     }
     this.view.renderCart();
   },
@@ -102,20 +166,76 @@ Object.assign(AppController.prototype, {
 
   checkout() {
     if (!this.model.cart.length) return this.view.toast('Cart is empty');
-    this.view.modal('Complete Order', `<p>Total: <strong>${this.view.money(this.model.totals().total)}</strong></p><label class="modal-field">Payment method<select id="paymentMethod"><option>Cash</option><option>GCash</option></select></label><button class="primary-action" type="button" data-action="confirm">Confirm Payment</button>`);
+    const nameInput = document.getElementById('posCustomerName');
+    const customerName = (nameInput ? nameInput.value : this.model.posCustomerName || '').trim();
+    if (!customerName) {
+      if (nameInput) nameInput.focus();
+      return this.view.toast('Please enter customer name');
+    }
+    this.model.posCustomerName = customerName;
+    const total = this.model.totals().total;
+    this.view.modal('Complete Order', `
+      <p>Customer: <strong>${customerName}</strong></p>
+      <p>Total: <strong id="checkoutTotalDisplay">${this.view.money(total)}</strong></p>
+      <label class="modal-field">Payment method<select id="paymentMethod"><option value="Cash">Cash</option><option value="GCash">GCash</option></select></label>
+      <div id="cashPaymentFields">
+        <label class="modal-field" style="margin-top:10px;">Amount Paid / Money Received (₱)<input id="paymentAmount" type="number" min="0" step="0.01" value="${total.toFixed(2)}"></label>
+        <div class="shift-summary-total" style="margin:10px 0 14px;"><span>Change</span><strong id="paymentChange">${this.view.money(0)}</strong></div>
+      </div>
+      <button class="primary-action" type="button" data-action="confirm" style="margin-top:12px;">Confirm Payment</button>
+    `);
+    const cashFields = document.getElementById('cashPaymentFields');
+    const amountEl = document.getElementById('paymentAmount');
+    const changeEl = document.getElementById('paymentChange');
+    const methodEl = document.getElementById('paymentMethod');
+    const updateChange = () => {
+      const paid = Number(amountEl.value || 0);
+      const diff = paid - total;
+      changeEl.textContent = diff >= 0 ? this.view.money(diff) : `Short ${this.view.money(Math.abs(diff))}`;
+      changeEl.style.color = diff >= 0 ? 'var(--green)' : 'var(--red)';
+    };
+    const toggleCashFields = () => {
+      const isCash = (methodEl?.value || 'Cash') === 'Cash';
+      if (cashFields) cashFields.style.display = isCash ? 'block' : 'none';
+      if (isCash && amountEl) {
+        updateChange();
+        amountEl.focus();
+        amountEl.select();
+      }
+    };
+    if (amountEl) {
+      amountEl.oninput = updateChange;
+    }
+    if (methodEl) {
+      methodEl.onchange = toggleCashFields;
+    }
+    toggleCashFields();
     this.bindDynamic();
   },
 
   confirmPayment() {
     const method = document.getElementById('paymentMethod')?.value || 'Cash';
+    const total = this.model.totals().total;
+    const isCash = method === 'Cash';
+    const amountPaid = isCash ? Number(document.getElementById('paymentAmount')?.value || 0) : total;
+    const customerName = (document.getElementById('posCustomerName')?.value || this.model.posCustomerName || '').trim();
+    if (!customerName) return this.view.toast('Customer name is required');
+    if (isCash && (isNaN(amountPaid) || amountPaid < total)) {
+      return this.view.toast(`Insufficient cash payment (need ${this.view.money(total)})`);
+    }
     try {
-      const order = this.model.placePosOrder(method);
+      const order = this.model.placePosOrder(method, customerName, amountPaid);
       this.model.cart = [];
+      this.model.posCustomerName = '';
+      const nameInput = document.getElementById('posCustomerName');
+      if (nameInput) nameInput.value = '';
       this.view.renderCart();
       this.view.closeModal();
       const strip = document.getElementById('posQueueStrip');
       if (strip) strip.innerHTML = this.view.posQueueStrip();
-      this.view.toast(`Order ${order.id} queued for barista approval`);
+      this.view.toast(isCash
+        ? `Order ${order.id} queued · Change: ${this.view.money(order.changeAmount || 0)}`
+        : `Order ${order.id} queued (GCash)`);
     } catch (error) {
       this.view.toast(error.message || 'Failed to queue order');
     }

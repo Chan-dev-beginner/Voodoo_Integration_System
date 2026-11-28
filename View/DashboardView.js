@@ -16,16 +16,17 @@ Object.assign(AppView.prototype, {
       ? todaySales / todayCompleted.length
       : (completedOrders.length ? totalSalesAll / completedOrders.length : 0);
 
-    const stockValue = products.reduce((sum, p) => sum + Number(p.price || 0) * Number(p.stock || 0), 0);
-    const lowStock = products.filter(p => p.stock > 0 && p.stock <= 5).length;
-    const outStock = products.filter(p => p.stock <= 0).length;
+    const cups = this.model.cupVariants || [];
+    const totalCups = cups.reduce((sum, c) => sum + Number(c.stock || 0), 0);
+    const lowStock = cups.filter(c => c.stock > 0 && c.stock <= (c.minStock || 10)).length;
+    const outStock = cups.filter(c => c.stock <= 0).length;
     const pendingRestocks = restocks.filter(r => r.status === 'Pending').length;
 
     const metrics = inventory
       ? [
-          ['Product stock', this.money(stockValue), `${products.length} products`],
-          ['Low stock', `${lowStock} item(s)`, lowStock ? 'Needs attention' : 'All good'],
-          ['Out of stock', `${outStock} item(s)`, outStock ? 'Urgent' : 'None'],
+          ['Cup variants stock', `${totalCups} cups`, `${cups.length} cup variants`],
+          ['Low stock cups', `${lowStock} variant(s)`, lowStock ? 'Needs attention' : 'All good'],
+          ['Out of stock cups', `${outStock} variant(s)`, outStock ? 'Urgent' : 'None'],
           ['Pending restocks', String(pendingRestocks), 'Awaiting approval']
         ]
       : [
@@ -53,10 +54,10 @@ Object.assign(AppView.prototype, {
     const maxDaySales = Math.max(...days.map(d => d.sales), 1);
 
     const barsHtml = inventory
-      ? products.slice(0, 7).map(p => {
-          const maxStock = Math.max(...products.map(x => Number(x.stock || 0)), 1);
-          const pct = Math.max(6, Math.round((Number(p.stock || 0) / maxStock) * 100));
-          return `<div class="chart-bar-col"><i style="height:${pct}%" title="${p.name}: ${p.stock} cups"></i><small>${p.name.split(' ')[0]}</small></div>`;
+      ? cups.map(c => {
+          const maxStock = Math.max(...cups.map(x => Number(x.stock || 0)), 1);
+          const pct = Math.max(6, Math.round((Number(c.stock || 0) / maxStock) * 100));
+          return `<div class="chart-bar-col"><i style="height:${pct}%" title="${c.name}: ${c.stock} cups"></i><small>${c.name.replace(' Cup', '')}</small></div>`;
         }).join('')
       : days.map(d => {
           const pct = d.sales > 0 ? Math.max(8, Math.round((d.sales / maxDaySales) * 100)) : 4;

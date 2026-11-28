@@ -1,6 +1,9 @@
 class Product {
-  constructor(id, name, category, price, stock, image) {
-    Object.assign(this, { id, name, category, price, stock, image });
+  constructor(id, name, category, price, stock, image, cupVariant) {
+    const inferredCup = category === 'Refresher'
+      ? (['16oz', '22oz'].includes(cupVariant) ? cupVariant : '22oz')
+      : 'hot';
+    Object.assign(this, { id, name, category, price, stock, image, cupVariant: inferredCup });
   }
 }
 
@@ -18,10 +21,58 @@ class AppModel {
     this.accounts = this.load('voodooAccounts', this.defaultAccounts());
     this.save('voodooAccounts', this.accounts);
 
+    const savedCups = this.load('voodooCupVariants', null);
+    this.cupVariants = Array.isArray(savedCups) && savedCups.length ? savedCups : this.defaultCupVariants();
+    if (!savedCups) this.save('voodooCupVariants', this.cupVariants);
+
     const saved = this.load('voodooProducts', null);
     this.products = (saved || this.defaultProducts())
-      .map(p => new Product(p.id, p.name, p.category, p.price, p.stock, p.image));
+      .map(p => new Product(p.id, p.name, p.category, p.price, p.stock, p.image, p.cupVariant));
+    this.syncProductStocksFromCups();
     if (!saved) this.saveProducts();
+  }
+
+  defaultCupVariants() {
+    return [
+      { key: '16oz', name: '16oz Cup', usedFor: 'Refreshers', stock: 50, minStock: 10 },
+      { key: '22oz', name: '22oz Cup', usedFor: 'Refreshers', stock: 50, minStock: 10 },
+      { key: 'hot', name: 'Hot Cup', usedFor: 'Coffee & Frappe', stock: 50, minStock: 10 }
+    ];
+  }
+
+  getAllowedCupKeys(category) {
+    return category === 'Refresher' ? ['16oz', '22oz'] : ['hot'];
+  }
+
+  getAllowedCupVariants(category) {
+    const allowed = this.getAllowedCupKeys(category);
+    return (this.cupVariants || []).filter(c => allowed.includes(c.key));
+  }
+
+  getCupVariant(key) {
+    return this.cupVariants.find(c => c.key === key) || this.cupVariants[0] || { key: '16oz', name: '16oz Cup', usedFor: 'Iced Coffee & Frappe', stock: 0, minStock: 10 };
+  }
+
+  getCupStock(key) {
+    return Number(this.getCupVariant(key)?.stock || 0);
+  }
+
+  getCupLabel(key) {
+    return this.getCupVariant(key)?.name || '16oz Cup';
+  }
+
+  getCartCupUsage(cupVariant) {
+    return this.cart.reduce((sum, item) => {
+      const prod = this.products.find(p => p.id === item.id);
+      const itemCup = item.cupVariant || prod?.cupVariant || '16oz';
+      return itemCup === cupVariant ? sum + Number(item.quantity || 0) : sum;
+    }, 0);
+  }
+
+  syncProductStocksFromCups() {
+    this.products.forEach(p => {
+      p.stock = this.getCupStock(p.cupVariant);
+    });
   }
 
   defaultAccounts() {
@@ -81,8 +132,14 @@ class AppModel {
         this.accounts = data.users;
         this.save('voodooAccounts', this.accounts);
       }
+      if (Array.isArray(data.cupVariants) && data.cupVariants.length) {
+        const notes = { '16oz': 'Refreshers', '22oz': 'Refreshers', 'hot': 'Coffee & Frappe' };
+        this.cupVariants = data.cupVariants.map(c => ({ ...c, usedFor: notes[c.key] || c.usedFor }));
+        this.save('voodooCupVariants', this.cupVariants);
+      }
       if (Array.isArray(data.products) && data.products.length) {
-        this.products = data.products.map(p => new Product(p.id, p.name, p.category, p.price, p.stock, p.image));
+        this.products = data.products.map(p => new Product(p.id, p.name, p.category, p.price, p.stock, p.image, p.cupVariant));
+        this.syncProductStocksFromCups();
         this.save('voodooProducts', this.products);
       }
       if (Array.isArray(data.orders)) {

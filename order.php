@@ -11,7 +11,7 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600;700&family=Oxanium:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20261125-MOD13">
+  <link rel="stylesheet" href="assets/styles.css?v=20261128-PAY1">
 </head>
 <body class="customer-ordering-body">
   <header class="customer-header">
@@ -80,6 +80,10 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
             <option value="Cash">Pay with Cash</option>
             <option value="GCash">Pay with GCash</option>
           </select>
+          <div id="customerCashFields">
+            <input type="number" id="customerCashPaid" min="0" step="0.01" placeholder="Cash amount / money to pay * (₱)">
+            <div class="customer-change-row"><span>Change</span><strong id="customerChange">₱0.00</strong></div>
+          </div>
         </div>
         <div class="grand-total"><span>Total</span><strong id="customerTotal">₱0.00</strong></div>
         <button class="charge-button" type="button" id="placeCustomerOrder"><span>Place order</span><strong>→</strong></button>
@@ -87,20 +91,27 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
     </aside>
   </main>
 
+  <div id="actionModal"></div>
   <div class="toast" id="toast" role="status"></div>
 
   <script>
     (() => {
+      const DEFAULT_CUP_VARIANTS = [
+        { key: '16oz', name: '16oz Cup', usedFor: 'Refreshers', stock: 50, minStock: 10 },
+        { key: '22oz', name: '22oz Cup', usedFor: 'Refreshers', stock: 50, minStock: 10 },
+        { key: 'hot', name: 'Hot Cup', usedFor: 'Coffee & Frappe', stock: 50, minStock: 10 }
+      ];
+
       const DEFAULT_PRODUCTS = [
-        { id: 1, name: 'Vanilla Latte', category: 'Coffee', price: 150, stock: 18, image: 'assets/2.png' },
-        { id: 2, name: 'Caramel Machiato', category: 'Coffee', price: 165, stock: 12, image: 'assets/3.png' },
-        { id: 3, name: 'Mocha Iced', category: 'Coffee', price: 170, stock: 9, image: 'assets/4.png' },
-        { id: 4, name: 'Matcha Frappe', category: 'Frappe', price: 185, stock: 4, image: 'assets/1.png' },
-        { id: 5, name: 'Berry Refresher', category: 'Refresher', price: 155, stock: 3, image: 'assets/refreshers.png' },
-        { id: 6, name: 'Iced Americano', category: 'Coffee', price: 120, stock: 22, image: 'assets/3.png' },
-        { id: 7, name: 'Chocolate Frappe', category: 'Frappe', price: 180, stock: 8, image: 'assets/4.png' },
-        { id: 8, name: 'Strawberry Matcha', category: 'Refresher', price: 160, stock: 0, image: 'assets/1.png' },
-        { id: 9, name: 'Salted Caramel', category: 'Coffee', price: 175, stock: 14, image: 'assets/2.png' }
+        { id: 1, name: 'Vanilla Latte', category: 'Coffee', price: 150, cupVariant: 'hot', stock: 50, image: 'assets/2.png' },
+        { id: 2, name: 'Caramel Machiato', category: 'Coffee', price: 165, cupVariant: 'hot', stock: 50, image: 'assets/3.png' },
+        { id: 3, name: 'Mocha Iced', category: 'Coffee', price: 170, cupVariant: 'hot', stock: 50, image: 'assets/4.png' },
+        { id: 4, name: 'Matcha Frappe', category: 'Frappe', price: 185, cupVariant: 'hot', stock: 50, image: 'assets/1.png' },
+        { id: 5, name: 'Berry Refresher', category: 'Refresher', price: 155, cupVariant: '22oz', stock: 50, image: 'assets/refreshers.png' },
+        { id: 6, name: 'Iced Americano', category: 'Coffee', price: 120, cupVariant: 'hot', stock: 50, image: 'assets/3.png' },
+        { id: 7, name: 'Chocolate Frappe', category: 'Frappe', price: 180, cupVariant: 'hot', stock: 50, image: 'assets/4.png' },
+        { id: 8, name: 'Strawberry Matcha', category: 'Refresher', price: 160, cupVariant: '22oz', stock: 50, image: 'assets/1.png' },
+        { id: 9, name: 'Salted Caramel', category: 'Coffee', price: 175, cupVariant: 'hot', stock: 50, image: 'assets/2.png' }
       ];
 
       const loadStore = (key, fallback) => {
@@ -118,12 +129,24 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
 
       const state = {
         products: [],
+        cupVariants: [],
         cart: [],
         category: 'All',
         search: '',
         orderType: 'dine-in',
         trackedName: localStorage.getItem('voodooCustomerOrderName') || ''
       };
+
+      const getAllowedCupKeys = category => (category === 'Refresher' ? ['16oz', '22oz'] : ['hot']);
+      const getAllowedCupVariants = category => {
+        const keys = getAllowedCupKeys(category);
+        return (state.cupVariants || []).filter(c => keys.includes(c.key));
+      };
+      const inferCupVariant = p => (p.category === 'Refresher' ? (['16oz', '22oz'].includes(p.cupVariant) ? p.cupVariant : '22oz') : 'hot');
+      const getCupVariant = key => state.cupVariants.find(c => c.key === key) || { key: 'hot', name: 'Hot Cup', stock: 0 };
+      const getCupStock = key => Number(getCupVariant(key)?.stock || 0);
+      const getCupLabel = key => getCupVariant(key)?.name || '16oz Cup';
+      const getCartCupUsage = cupKey => state.cart.reduce((sum, item) => (inferCupVariant(item) === cupKey ? sum + Number(item.quantity || 0) : sum), 0);
 
       const money = value => `₱${Number(value || 0).toFixed(2)}`;
       let toastTimer;
@@ -150,44 +173,103 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
           (state.category === 'All' || p.category === state.category) &&
           p.name.toLowerCase().includes(query)
         );
-        grid.innerHTML = filtered.map(product => `
-          <article class="product-card">
+        grid.innerHTML = filtered.map(product => {
+          const allowedCups = getAllowedCupVariants(product.category);
+          const totalAvailable = allowedCups.reduce((sum, c) => sum + Number(c.stock || 0), 0);
+          return `
+          <article class="product-card" data-product-card="${product.id}" style="cursor:pointer;">
             <div class="product-image"><img src="${product.image}" alt="${product.name}"></div>
             <div class="product-info">
               <div>
                 <h3>${product.name}</h3>
-                <p>${money(product.price)} · ${product.stock > 0 ? product.stock + ' left' : 'Out of stock'}</p>
+                <p>${money(product.price)}${totalAvailable <= 0 ? ' · Out of stock' : ''}</p>
               </div>
-              <div class="card-order-controls">
-                <div class="card-qty-stepper">
-                  <button type="button" data-step="-1" data-id="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>−</button>
-                  <input type="number" class="card-qty-input" data-card-qty="${product.id}" value="1" min="1" max="${Math.max(1, product.stock)}" ${product.stock <= 0 ? 'disabled' : ''} aria-label="Quantity for ${product.name}">
-                  <button type="button" data-step="1" data-id="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋</button>
-                </div>
-                <button class="add-button" type="button" data-add="${product.id}" ${product.stock <= 0 ? 'disabled' : ''}>＋ Add</button>
-              </div>
+              <button class="add-button" type="button" data-open-cup="${product.id}" ${totalAvailable <= 0 ? 'disabled' : ''}>＋ Add</button>
             </div>
           </article>
-        `).join('') || '<p>No products found.</p>';
+        `; }).join('') || '<p>No products found.</p>';
+      };
+
+      const closeCupModal = () => {
+        const modal = document.getElementById('actionModal');
+        if (!modal) return;
+        modal.classList.remove('open');
+        modal.innerHTML = '';
+      };
+
+      const openCustomerCupModal = productId => {
+        const product = state.products.find(p => p.id === productId);
+        if (!product) return;
+        const allowedCups = getAllowedCupVariants(product.category);
+        const firstAvailable = allowedCups.find(c => Number(c.stock) > 0) || allowedCups[0];
+        const cupCards = allowedCups.map(cup => {
+          const disabled = Number(cup.stock) <= 0;
+          const checked = firstAvailable && cup.key === firstAvailable.key && !disabled ? 'checked' : '';
+          return `<label class="cup-option-card ${disabled ? 'disabled' : ''}">
+            <input type="radio" name="customerCupVariant" value="${cup.key}" ${checked} ${disabled ? 'disabled' : ''}>
+            <div>
+              <strong>${cup.name}</strong>
+              ${disabled ? '<small>Out of stock</small>' : ''}
+            </div>
+          </label>`;
+        }).join('');
+        const modal = document.getElementById('actionModal');
+        modal.classList.add('open');
+        modal.innerHTML = `<div class="modal-backdrop"><div class="modal-card">
+          <div class="data-head"><h2>Select Cup — ${product.name}</h2><button class="row-action" type="button" id="closeCustomerCupModal">×</button></div>
+          <div class="modal-body">
+            <div class="cup-modal-product">
+              <img src="${product.image}" alt="${product.name}">
+              <div><strong>${product.name}</strong><p>${product.category} · ${money(product.price)}</p></div>
+            </div>
+            <div class="cup-option-grid">${cupCards}</div>
+            <button class="primary-action" type="button" id="confirmCustomerCupAdd" data-id="${product.id}" style="width:100%;margin-top:14px;">Add to Cart</button>
+          </div>
+        </div></div>`;
       };
 
       const renderCart = () => {
         const list = document.getElementById('customerCartItems');
         const total = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
         list.innerHTML = state.cart.length
-          ? state.cart.map(item => `
+          ? state.cart.map(item => {
+            const key = item.cartKey || `${item.id}_${inferCupVariant(item)}`;
+            const cupLabel = getCupLabel(item.cupVariant || inferCupVariant(item));
+            return `
             <div class="cart-item">
               <img src="${item.image}" alt="">
-              <div><h4>${item.name}</h4><small>${money(item.price)}</small></div>
+              <div><h4>${item.name}</h4><small>${cupLabel} · ${money(item.price)}</small></div>
               <div class="quantity">
-                <button type="button" data-qty="-1" data-id="${item.id}">−</button>
+                <button type="button" data-qty="-1" data-id="${key}">−</button>
                 <span>${item.quantity}</span>
-                <button type="button" data-qty="1" data-id="${item.id}">＋</button>
+                <button type="button" data-qty="1" data-id="${key}">＋</button>
               </div>
             </div>
-          `).join('')
+          `; }).join('')
           : '<div class="empty-cart">Tap ＋ on a drink to start your order.</div>';
         document.getElementById('customerTotal').textContent = money(total);
+        updateCustomerPaymentUi();
+      };
+
+      const updateCustomerPaymentUi = () => {
+        const method = document.getElementById('customerPayment')?.value || 'Cash';
+        const cashFields = document.getElementById('customerCashFields');
+        const cashInput = document.getElementById('customerCashPaid');
+        const changeEl = document.getElementById('customerChange');
+        const total = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const isCash = method === 'Cash';
+        if (cashFields) cashFields.style.display = isCash ? 'block' : 'none';
+        if (isCash && changeEl) {
+          const paid = Number(cashInput?.value || 0);
+          const diff = paid - total;
+          if (!cashInput?.value) {
+            changeEl.textContent = money(0);
+            changeEl.style.color = 'var(--muted)';
+          } else {
+            changeEl.textContent = diff >= 0 ? money(diff) : `Short ${money(Math.abs(diff))}`;
+            changeEl.style.color = diff >= 0 ? 'var(--green)' : 'var(--red)';
+          }
+        }
       };
 
       const renderTracker = order => {
@@ -230,6 +312,10 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
             const resp = await fetch('Controller/db_sync.php?action=get_products');
             const data = await resp.json();
             if (data.ok && Array.isArray(data.products) && data.products.length) {
+              if (Array.isArray(data.cupVariants) && data.cupVariants.length) {
+                state.cupVariants = data.cupVariants;
+                saveStore('voodooCupVariants', state.cupVariants);
+              }
               state.products = data.products;
               saveStore('voodooProducts', state.products);
               renderMenu();
@@ -237,7 +323,12 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
             }
           } catch (err) { /* fallback to localStorage */ }
         }
-        state.products = loadStore('voodooProducts', DEFAULT_PRODUCTS);
+        state.cupVariants = loadStore('voodooCupVariants', DEFAULT_CUP_VARIANTS);
+        state.products = loadStore('voodooProducts', DEFAULT_PRODUCTS).map(p => ({
+          ...p,
+          cupVariant: inferCupVariant(p),
+          stock: getCupStock(inferCupVariant(p))
+        }));
         renderMenu();
       };
 
@@ -259,50 +350,60 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
       };
 
       document.addEventListener('click', event => {
-        const stepBtn = event.target.closest('[data-step]');
-        if (stepBtn) {
-          const id = Number(stepBtn.dataset.id);
-          const delta = Number(stepBtn.dataset.step);
-          const input = document.querySelector(`[data-card-qty="${id}"]`);
-          const product = state.products.find(p => p.id === id);
-          if (!input || !product) return;
-          const next = Math.max(1, Math.min(product.stock, (parseInt(input.value, 10) || 1) + delta));
-          input.value = next;
+        if (event.target.id === 'closeCustomerCupModal' || event.target.classList.contains('modal-backdrop')) {
+          closeCupModal();
           return;
         }
 
-        const addBtn = event.target.closest('[data-add]');
-        if (addBtn) {
-          const id = Number(addBtn.dataset.add);
+        if (event.target.id === 'confirmCustomerCupAdd') {
+          const id = Number(event.target.dataset.id);
           const product = state.products.find(p => p.id === id);
-          if (!product || product.stock <= 0) return toast('Out of stock');
-          const qtyInput = document.querySelector(`[data-card-qty="${id}"]`);
-          const qtyToAdd = Math.max(1, parseInt(qtyInput?.value, 10) || 1);
-          const existing = state.cart.find(c => c.id === id);
-          const currentQty = existing ? existing.quantity : 0;
-          if (currentQty + qtyToAdd > product.stock) {
-            return toast(`Only ${product.stock - currentQty} left in stock`);
+          const selected = document.querySelector('input[name="customerCupVariant"]:checked');
+          if (!product || !selected) return toast('Selected cup variant is out of stock');
+          const cupKey = selected.value;
+          const cupStock = getCupStock(cupKey);
+          const cupLabel = getCupLabel(cupKey);
+          const qtyToAdd = 1;
+          const usedCups = getCartCupUsage(cupKey);
+          if (usedCups + qtyToAdd > cupStock) {
+            return toast(`Only ${Math.max(0, cupStock - usedCups)} ${cupLabel}(s) left`);
           }
+          const cartKey = `${id}_${cupKey}`;
+          const existing = state.cart.find(c => (c.cartKey || `${c.id}_${inferCupVariant(c)}`) === cartKey);
           if (existing) {
             existing.quantity += qtyToAdd;
           } else {
-            state.cart.push({ ...product, quantity: qtyToAdd });
+            state.cart.push({ ...product, cupVariant: cupKey, cartKey, quantity: qtyToAdd });
           }
-          if (qtyInput) qtyInput.value = 1;
           renderCart();
-          return toast(`Added ${qtyToAdd}× ${product.name}`);
+          closeCupModal();
+          return toast(`Added ${product.name} (${cupLabel})`);
+        }
+
+        const openBtn = event.target.closest('[data-open-cup]');
+        if (openBtn) {
+          openCustomerCupModal(Number(openBtn.dataset.openCup));
+          return;
+        }
+
+        const card = event.target.closest('[data-product-card]');
+        if (card && !event.target.closest('button')) {
+          openCustomerCupModal(Number(card.dataset.productCard));
+          return;
         }
 
         const qtyBtn = event.target.closest('[data-qty]');
         if (qtyBtn) {
-          const id = Number(qtyBtn.dataset.id);
+          const keyStr = String(qtyBtn.dataset.id);
           const change = Number(qtyBtn.dataset.qty);
-          const item = state.cart.find(c => c.id === id);
-          const product = state.products.find(p => p.id === id);
+          const item = state.cart.find(c => (c.cartKey || `${c.id}_${inferCupVariant(c)}`) === keyStr);
           if (!item) return;
-          if (change > 0 && product && item.quantity >= product.stock) return toast('Not enough stock');
+          const cupKey = item.cupVariant || inferCupVariant(item);
+          if (change > 0 && getCartCupUsage(cupKey) >= getCupStock(cupKey)) {
+            return toast(`Not enough ${getCupLabel(cupKey)} stock`);
+          }
           item.quantity += change;
-          if (item.quantity <= 0) state.cart = state.cart.filter(c => c.id !== id);
+          if (item.quantity <= 0) state.cart = state.cart.filter(c => (c.cartKey || `${c.id}_${inferCupVariant(c)}`) !== keyStr);
           renderCart();
           return;
         }
@@ -331,6 +432,8 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
 
       document.getElementById('customerClearCart').onclick = () => {
         state.cart = [];
+        const cashEl = document.getElementById('customerCashPaid');
+        if (cashEl) cashEl.value = '';
         renderCart();
       };
 
@@ -342,6 +445,9 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         localStorage.setItem('voodooCustomerOrderName', state.trackedName);
         await pollTrackedOrder(true);
       };
+
+      document.getElementById('customerPayment').onchange = updateCustomerPaymentUi;
+      document.getElementById('customerCashPaid').oninput = updateCustomerPaymentUi;
 
       document.getElementById('placeCustomerOrder').onclick = async () => {
         if (!state.cart.length) return toast('Your cart is empty');
@@ -363,15 +469,28 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
           return toast('Payment must be Cash or GCash only');
         }
 
+        const subtotal = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const isCash = paymentMethod === 'Cash';
+        const cashInput = document.getElementById('customerCashPaid');
+        const amountPaid = isCash ? Number(cashInput?.value || 0) : subtotal;
+        if (isCash && (!cashInput?.value || isNaN(amountPaid) || amountPaid < subtotal)) {
+          if (cashInput) cashInput.focus();
+          return toast(`Insufficient cash payment (need ${money(subtotal)})`);
+        }
+
         loadProducts();
+        const neededByCup = {};
         for (const cartItem of state.cart) {
           const product = state.products.find(p => p.id === cartItem.id);
-          if (!product || product.stock < cartItem.quantity) {
-            return toast(`Not enough stock for ${cartItem.name}`);
+          const cupKey = cartItem.cupVariant || (product ? inferCupVariant(product) : '16oz');
+          neededByCup[cupKey] = (neededByCup[cupKey] || 0) + Number(cartItem.quantity || 0);
+        }
+        for (const [cupKey, needed] of Object.entries(neededByCup)) {
+          if (getCupStock(cupKey) < needed) {
+            return toast(`Not enough ${getCupLabel(cupKey)} stock (${getCupStock(cupKey)} left)`);
           }
         }
 
-        const subtotal = state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
         const order = {
           id: '#Q' + String(Date.now()).slice(-6),
           customerName,
@@ -380,11 +499,14 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
           orderType: state.orderType,
           status: 'pending',
           paymentMethod,
+          amountPaid,
+          changeAmount: isCash ? Math.max(0, amountPaid - subtotal) : 0,
           account: 'QR Customer',
           time: new Date().toISOString(),
           items: state.cart.map(item => ({
             productId: item.id,
             name: item.name,
+            cupVariant: item.cupVariant || inferCupVariant(item),
             quantity: item.quantity,
             price: item.price,
             total: item.price * item.quantity
@@ -409,6 +531,7 @@ $pageTitle = APP_TITLE . ' — Self-Service Ordering';
         } catch (err) { /* offline fallback — localStorage only */ }
 
         state.cart = [];
+        if (cashInput) cashInput.value = '';
         renderCart();
         state.trackedName = customerName;
         localStorage.setItem('voodooCustomerOrderName', customerName);
